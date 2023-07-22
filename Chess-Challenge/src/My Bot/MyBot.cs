@@ -5,6 +5,9 @@ using System.Linq;
 
 public class MyBot : IChessBot
 {
+    Timer _timer;
+    Board _position;
+    int _targetDepth = 1;
     readonly int[] _indexes = new int[128 + 1];
     readonly Move[] _pVTable = new Move[128 * (128 + 1) / 2];
     //readonly int[,] _previousKillerMoves = new int[2, 128];
@@ -16,10 +19,12 @@ public class MyBot : IChessBot
 
     public Move Think(Board board, Timer timer)
     {
+        _position = board;
+        _timer = timer;
         int previousPVIndex = 0;
         _indexes[0] = previousPVIndex;
 
-        for (int i = 0; i < _indexes.Length - 1; ++i)
+        for (int i = -1; ++i < _indexes.Length - 1;)
         {
             _indexes[i + 1] = previousPVIndex + 128 - i;
             previousPVIndex = _indexes[i + 1];
@@ -34,7 +39,6 @@ public class MyBot : IChessBot
         int beta = short.MaxValue;
 
         Move bestMove = board.GetLegalMoves()[0];
-        int depth = 1;
         try
         {
             bool isMateDetected;
@@ -42,7 +46,7 @@ public class MyBot : IChessBot
             {
                 //AspirationWindows_SearchAgain:
                 _isFollowingPV = true;
-                int bestEvaluation = NegaMax(board, minDepth: 2, depth, 0, alpha, beta, timer);
+                int bestEvaluation = NegaMax(0, alpha, beta);
                 isMateDetected = Math.Abs(bestEvaluation) > 27_000;
 
                 //if (!isMateDetected && ((bestEvaluation <= alpha) || (bestEvaluation >= beta)))
@@ -54,13 +58,13 @@ public class MyBot : IChessBot
                 //}
 
                 bestMove = _pVTable[0] != default ? _pVTable[0] : bestMove;
-                Console.WriteLine($"Depth {depth}: bestmove {bestMove.ToString()[7..^1]}, eval: {bestEvaluation}, PV: {string.Join(", ", _pVTable.TakeWhile(m => !m.IsNull).Select(m => m.ToString()[7..^1]))}");
+                //Console.WriteLine($"Depth {depth}: bestmove {bestMove.ToString()[7..^1]}, eval: {bestEvaluation}, PV: {string.Join(", ", _pVTable.TakeWhile(m => !m.IsNull).Select(m => m.ToString()[7..^1]))}");
                 //alpha = bestEvaluation - 50;
                 //beta = bestEvaluation + 50;
 
                 //Array.Copy(_killerMoves, _previousKillerMoves, _killerMoves.Length);
 
-                ++depth;
+                ++_targetDepth;
             }
             while (!isMateDetected && timer.MillisecondsElapsedThisTurn < 3_000);
         }
@@ -72,23 +76,23 @@ public class MyBot : IChessBot
         return bestMove;
     }
 
-    int NegaMax(Board position, int minDepth, int targetDepth, int ply, int alpha, int beta, Timer timer)
+    int NegaMax(int ply, int alpha, int beta)
     {
         //if (Position.IsThreefoldRepetition(Game.PositionHashHistory) || Position.Is50MovesRepetition(_halfMovesWithoutCaptureOrPawnMove))
         //{
         //    return 0;
         //}
 
-        if (timer.MillisecondsElapsedThisTurn > 3_000)
+        if (_timer.MillisecondsElapsedThisTurn > 3_000)
         {
-            return StaticEvaluation(position);
+            return StaticEvaluation();
         }
 
-        if (ply > targetDepth)
+        if (ply > _targetDepth)
         {
-            return position.GetLegalMoves().Length > 0
-                 ? QuiescenceSearch(position, ply, alpha, beta, timer)
-                 : EvaluateFinalPosition(position, ply);
+            return _position.GetLegalMoves().Length > 0
+                 ? QuiescenceSearch(ply, alpha, beta)
+                 : EvaluateFinalPosition(ply);
         }
 
         Move bestMove = new Move();
@@ -98,14 +102,14 @@ public class MyBot : IChessBot
         nextPvIndex = _indexes[ply + 1];
         _pVTable[pvIndex] = new Move();
 
-        var legalMoves = position.GetLegalMoves();
-        foreach (var move in Sort(legalMoves, position, ply))
+        var legalMoves = _position.GetLegalMoves();
+        foreach (var move in Sort(legalMoves, ply))
         {
-            position.MakeMove(move);
+            _position.MakeMove(move);
 
-            var evaluation = -NegaMax(position, minDepth, targetDepth, ply + 1, -beta, -alpha, timer);
+            var evaluation = -NegaMax(ply + 1, -beta, -alpha);
 
-            position.UndoMove(move);
+            _position.UndoMove(move);
 
             // Fail-hard beta-cutoff - refutation found, no need to keep searching this line
             if (evaluation >= beta)
@@ -137,14 +141,14 @@ public class MyBot : IChessBot
 
         if (bestMove.IsNull && legalMoves.Length == 0)
         {
-            return EvaluateFinalPosition(position, ply);
+            return EvaluateFinalPosition(ply);
         }
 
         // Node fails low
         return alpha;
     }
 
-    int QuiescenceSearch(Board position, int ply, int alpha, int beta, Timer timer)
+    int QuiescenceSearch(int ply, int alpha, int beta)
     {
         //if (Position.IsThreefoldRepetition(Game.PositionHashHistory) || Position.Is50MovesRepetition(_halfMovesWithoutCaptureOrPawnMove))
         //{
@@ -153,14 +157,14 @@ public class MyBot : IChessBot
 
         if (ply >= 128)
         {
-            return StaticEvaluation(position);
+            return StaticEvaluation();
         }
 
         var pvIndex = _indexes[ply];
         var nextPvIndex = _indexes[ply + 1];
         _pVTable[pvIndex] = new Move();   // Nulling the first value before any returns
 
-        var staticEvaluation = StaticEvaluation(position);
+        var staticEvaluation = StaticEvaluation();
 
         // Fail-hard beta-cutoff (updating alpha after this check)
         if (staticEvaluation >= beta)
@@ -174,7 +178,7 @@ public class MyBot : IChessBot
             alpha = staticEvaluation;
         }
 
-        var generatedMoves = position.GetLegalMoves(true);
+        var generatedMoves = _position.GetLegalMoves(true);
         if (!generatedMoves.Any())
         {
             return staticEvaluation;
@@ -182,13 +186,13 @@ public class MyBot : IChessBot
 
         Move bestMove = new Move();
 
-        foreach (var move in generatedMoves.OrderByDescending(m => Score(m, position)))
+        foreach (var move in generatedMoves.OrderByDescending(m => Score(m)))
         {
-            position.MakeMove(move);
+            _position.MakeMove(move);
 
-            var evaluation = -QuiescenceSearch(position, ply + 1, -beta, -alpha, timer);
+            var evaluation = -QuiescenceSearch(ply + 1, -beta, -alpha);
 
-            position.UndoMove(move);
+            _position.UndoMove(move);
 
             // Fail-hard beta-cutoff
             if (evaluation >= beta)
@@ -208,16 +212,16 @@ public class MyBot : IChessBot
 
         if (bestMove.IsNull)
         {
-            return position.GetLegalMoves().Length > 0
+            return _position.GetLegalMoves().Length > 0
                 ? alpha
-                : EvaluateFinalPosition(position, ply);
+                : EvaluateFinalPosition(ply);
         }
 
         // Node fails low
         return alpha;
     }
 
-    IEnumerable<Move> Sort(Move[] moves, Board board, int depth)
+    IEnumerable<Move> Sort(Move[] moves, int depth)
     {
         if (_isFollowingPV)
         {
@@ -234,10 +238,10 @@ public class MyBot : IChessBot
         }
 
         return moves
-            .OrderByDescending(move => Score(move, board, depth/*, _killerMoves*/));
+            .OrderByDescending(move => Score(move, depth/*, _killerMoves*/));
     }
 
-    int Score(Move move, Board position, int depth = 0/*, int[,]? killerMoves = null,  int[,]? historyMoves = null*/)
+    int Score(Move move, int depth = 0/*, int[,]? killerMoves = null,  int[,]? historyMoves = null*/)
     {
         if (_isScoringPV && move == _pVTable[depth])
         {
@@ -246,15 +250,15 @@ public class MyBot : IChessBot
             return 20_000;
         }
 
-        var offset = position.IsWhiteToMove ? -1 : +5;
+        var offset = _position.IsWhiteToMove ? -1 : +5;
 
         if (move.IsCapture)
         {
             int targetPiece = (int)PieceType.Pawn;    // Important to initialize to P or p, due to en-passant captures
-            for (int pieceIndex = 1; pieceIndex < 7; ++pieceIndex)
+            for (int pieceIndex = 0; ++pieceIndex < 7;)
             {
                 if (BitboardHelper.SquareIsSet(
-                    position.GetPieceBitboard((PieceType)pieceIndex, !position.IsWhiteToMove),
+                    _position.GetPieceBitboard((PieceType)pieceIndex, !_position.IsWhiteToMove),
                     move.TargetSquare))
                 {
                     targetPiece = pieceIndex;
@@ -301,13 +305,13 @@ public class MyBot : IChessBot
         Array.Copy(_pVTable, source, _pVTable, target, moveCountToCopy);
     }
 
-    static int StaticEvaluation(Board board)
+    int StaticEvaluation()
     {
         int eval = 0;
 
-        for (int i = 1; i < 6; ++i)
+        for (int i = 0; ++i < 6;)
         {
-            var whiteBitboard = board.GetPieceBitboard((PieceType)i, true);
+            var whiteBitboard = _position.GetPieceBitboard((PieceType)i, true);
             while (whiteBitboard != default)
             {
                 BitboardHelper.ClearAndGetIndexOfLSB(ref whiteBitboard);
@@ -315,7 +319,7 @@ public class MyBot : IChessBot
                 eval += MaterialScore[i];
             }
 
-            var blackBitboard = board.GetPieceBitboard((PieceType)i, false);
+            var blackBitboard = _position.GetPieceBitboard((PieceType)i, false);
             while (blackBitboard != default)
             {
                 BitboardHelper.ClearAndGetIndexOfLSB(ref blackBitboard);
@@ -324,10 +328,10 @@ public class MyBot : IChessBot
             }
         }
 
-        return board.IsWhiteToMove ? eval : -eval;
+        return _position.IsWhiteToMove ? eval : -eval;
     }
 
-    static int EvaluateFinalPosition(Board position, int ply) => position.IsInCheck()
+    int EvaluateFinalPosition(int ply) => _position.IsInCheck()
                 ? -30_000 + 10 * ply
                 : 0;
 
