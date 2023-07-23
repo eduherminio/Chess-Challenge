@@ -1,13 +1,15 @@
-﻿#pragma warning disable RCS1001 // Add braces (when expression spans over multiple lines) - Tokens are tokens
+﻿//#define DEBUG
+#pragma warning disable RCS1001 // Add braces (when expression spans over multiple lines) - Tokens are tokens
 
 using ChessChallenge.API;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 
 public class MyBot : IChessBot
 {
     Board _position;
+    Timer _timer;
+    int _timePerMove;
     int _targetDepth;
     readonly int[] _indexes = new int[128 + 1];
     readonly Move[] _pVTable = new Move[128 * (128 + 1) / 2];
@@ -35,6 +37,7 @@ public class MyBot : IChessBot
     public Move Think(Board board, Timer timer)
     {
         _position = board;
+        _timer = timer;
         _targetDepth = 1;
         _isScoringPV = false;
         Array.Clear(_pVTable);
@@ -44,11 +47,12 @@ public class MyBot : IChessBot
         #region Time management
 
         var movesToGo = 100 - board.PlyCount >> 1;
-        movesToGo = movesToGo <= 0 ? 20 : movesToGo;
-        int timePerMove = timer.MillisecondsRemaining / movesToGo;
+        movesToGo = Math.Clamp(movesToGo, 40, 100);
+        _timePerMove = Math.Clamp(timer.MillisecondsRemaining / movesToGo, 1, 1000);
 
 #if DEBUG
-        Console.WriteLine($"Time to move {timePerMove}");
+        Console.WriteLine($"Searching {_position.GetFenString()}");
+        Console.WriteLine($"Time to move {_timePerMove}");
 #endif
 
         #endregion
@@ -87,17 +91,18 @@ public class MyBot : IChessBot
                 msSpentPerDepth = timer.MillisecondsElapsedThisTurn - msSpentPerDepth;
                 ++_targetDepth;
             }
-            while (!isMateDetected && msSpentPerDepth < timePerMove * 0.5);
+            while (!isMateDetected && msSpentPerDepth < _timePerMove * 0.5);
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            ;
+#if DEBUG
+            //Console.WriteLine($"Exception: {e.Message}\n{e.StackTrace}");
+#endif
         }
 
 #if DEBUG
         Console.WriteLine($"Time used {timer.MillisecondsElapsedThisTurn}");
 #endif
-
         return bestMove;
     }
 
@@ -105,6 +110,9 @@ public class MyBot : IChessBot
     {
         if (_position.IsDraw())
             return 0;
+
+        if (_timer.MillisecondsElapsedThisTurn > _timePerMove)
+            throw new();
 
         if (ply > _targetDepth)
             return _position.GetLegalMoves().Any()//.Length > 0
@@ -188,7 +196,16 @@ public class MyBot : IChessBot
         Move bestMove = new();
         _pVTable[pvIndex] = bestMove;   // Nulling the first value before any returns
 
-        var staticEvaluation = StaticEvaluation();
+        int staticEvaluation = 0;
+
+        #region Static evaluation
+
+        for (int i = 0; ++i < 6;)
+            staticEvaluation += MaterialScore[i] *
+                (_position.GetPieceList((PieceType)i, _position.IsWhiteToMove).Count
+                - _position.GetPieceList((PieceType)i, !_position.IsWhiteToMove).Count);
+
+        #endregion
 
         // Fail-hard beta-cutoff (updating alpha after this check)
         if (staticEvaluation >= beta)
@@ -294,30 +311,6 @@ public class MyBot : IChessBot
         }
 
         Array.Copy(_pVTable, source, _pVTable, target, 128 - ply - 1);
-    }
-
-    int StaticEvaluation()
-    {
-        int eval = 0;
-
-        for (int i = 0; ++i < 6;)
-        {
-            var bitboard = _position.GetPieceBitboard((PieceType)i, _position.IsWhiteToMove);
-            while (bitboard != default)
-            {
-                BitboardHelper.ClearAndGetIndexOfLSB(ref bitboard);
-                eval += MaterialScore[i];
-            }
-
-            bitboard = _position.GetPieceBitboard((PieceType)i, !_position.IsWhiteToMove);
-            while (bitboard != default)
-            {
-                BitboardHelper.ClearAndGetIndexOfLSB(ref bitboard);
-                eval -= MaterialScore[i];
-            }
-        }
-
-        return eval;
     }
 
     int EvaluateFinalPosition(int ply) => _position.IsInCheckmate()
