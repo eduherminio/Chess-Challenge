@@ -8,27 +8,19 @@ using System.Linq;
 public class MyBot : IChessBot
 {
     Board _position;
-    int _targetDepth = 1;
+    int _targetDepth;
     readonly int[] _indexes = new int[128 + 1];
     readonly Move[] _pVTable = new Move[128 * (128 + 1) / 2];
     //readonly int[,] _previousKillerMoves = new int[2, 128];
     //readonly int[,] _killerMoves = new int[2, 128];
     //readonly int[,] _historyMoves = new int[12, 64];
 
-    bool _isFollowingPV;
-    bool _isScoringPV;
+    bool _isFollowingPV, _isScoringPV;
 
-    public Move Think(Board board, Timer timer)
+    public MyBot()
     {
-        var movesToGo = 100 - board.PlyCount >> 1;
-        movesToGo = movesToGo < 0 ? 20 : movesToGo;
-        int timePerMove = timer.MillisecondsRemaining / movesToGo;
+        #region _indexes initialization
 
-#if DEBUG
-        Console.WriteLine($"Time to move {timePerMove}");
-#endif
-
-        _position = board;
         int previousPVIndex = 0;
         _indexes[0] = previousPVIndex;
 
@@ -37,17 +29,33 @@ public class MyBot : IChessBot
             _indexes[i + 1] = previousPVIndex + 128 - i;
             previousPVIndex = _indexes[i + 1];
         }
-        _isScoringPV = false;
+        #endregion
+    }
 
+    public Move Think(Board board, Timer timer)
+    {
+        _position = board;
+        _targetDepth = 1;
+        _isScoringPV = false;
         Array.Clear(_pVTable);
         //Array.Clear(_killerMoves);
         //Array.Clear(_historyMoves);
 
-        int alpha = short.MinValue;
-        int beta = short.MaxValue;
-        _targetDepth = 1;
+        #region Time management
 
-        Move bestMove = board.GetLegalMoves()[0];
+        var movesToGo = 100 - board.PlyCount >> 1;
+        movesToGo = movesToGo <= 0 ? 20 : movesToGo;
+        int timePerMove = timer.MillisecondsRemaining / movesToGo;
+
+#if DEBUG
+        Console.WriteLine($"Time to move {timePerMove}");
+#endif
+
+        #endregion
+
+        int alpha = short.MinValue, beta = short.MaxValue;
+
+        Move bestMove = new();
         try
         {
             bool isMateDetected;
@@ -67,7 +75,7 @@ public class MyBot : IChessBot
                 //    goto AspirationWindows_SearchAgain;
                 //}
 
-                bestMove = _pVTable[0] != default ? _pVTable[0] : bestMove;
+                bestMove = _pVTable[0];
 #if DEBUG
                 Console.WriteLine($"Depth {_targetDepth}: bestmove {bestMove.ToString()[7..^1]}, eval: {bestEvaluation}, PV: {string.Join(", ", _pVTable.TakeWhile(m => !m.IsNull).Select(m => m.ToString()[7..^1]))}");
 #endif
@@ -86,6 +94,10 @@ public class MyBot : IChessBot
             ;
         }
 
+#if DEBUG
+        Console.WriteLine($"Time used {timer.MillisecondsElapsedThisTurn}");
+#endif
+
         return bestMove;
     }
 
@@ -95,7 +107,7 @@ public class MyBot : IChessBot
             return 0;
 
         if (ply > _targetDepth)
-            return _position.GetLegalMoves().Length > 0
+            return _position.GetLegalMoves().Any()//.Length > 0
                  ? QuiescenceSearch(ply, alpha, beta)
                  : EvaluateFinalPosition(ply);
 
@@ -107,7 +119,23 @@ public class MyBot : IChessBot
         _pVTable[pvIndex] = bestMove;
 
         var legalMoves = _position.GetLegalMoves();
-        foreach (var move in Sort(legalMoves, ply))
+
+        #region Move sorting
+
+        if (_isFollowingPV)
+        {
+            _isFollowingPV = false;
+            foreach (var move in legalMoves)
+                if (move == _pVTable[ply])
+                {
+                    _isFollowingPV = _isScoringPV = true;
+                    break;
+                }
+        }
+
+        #endregion
+
+        foreach (var move in legalMoves.OrderByDescending(move => Score(move, ply/*, _killerMoves*/)))
         {
             //PrintPreMove(ply, move);
             _position.MakeMove(move);
@@ -157,7 +185,8 @@ public class MyBot : IChessBot
 
         var pvIndex = _indexes[ply];
         var nextPvIndex = _indexes[ply + 1];
-        _pVTable[pvIndex] = new();   // Nulling the first value before any returns
+        Move bestMove = new();
+        _pVTable[pvIndex] = bestMove;   // Nulling the first value before any returns
 
         var staticEvaluation = StaticEvaluation();
 
@@ -169,13 +198,11 @@ public class MyBot : IChessBot
         if (staticEvaluation > alpha)
             alpha = staticEvaluation;
 
-        var generatedMoves = _position.GetLegalMoves(true);
-        if (!generatedMoves.Any())
+        var captures = _position.GetLegalMoves(true);
+        if (captures.Length == 0)
             return staticEvaluation;
 
-        Move bestMove = _pVTable[pvIndex];
-
-        foreach (var move in generatedMoves.OrderByDescending(m => Score(m)))
+        foreach (var move in captures.OrderByDescending(m => Score(m, ply)))
         {
             //PrintPreMove(ply, move, true);
             _position.MakeMove(move);
@@ -205,25 +232,7 @@ public class MyBot : IChessBot
         return alpha;
     }
 
-    IEnumerable<Move> Sort(Move[] moves, int depth)
-    {
-        if (_isFollowingPV)
-        {
-            _isFollowingPV = false;
-            foreach (var move in moves)
-                if (move == _pVTable[depth])
-                {
-                    _isFollowingPV = true;
-                    _isScoringPV = true;
-                    break;
-                }
-        }
-
-        return moves
-            .OrderByDescending(move => Score(move, depth/*, _killerMoves*/));
-    }
-
-    int Score(Move move, int depth = 0/*, int[,]? killerMoves = null,  int[,]? historyMoves = null*/)
+    int Score(Move move, int depth/*, int[,]? killerMoves = null,  int[,]? historyMoves = null*/)
     {
         if (_isScoringPV && move == _pVTable[depth])
         {
@@ -315,9 +324,9 @@ public class MyBot : IChessBot
                 ? -30_000 + 10 * ply
                 : 0;
 
-    static readonly int[] MaterialScore = new int[6]
+    static readonly int[] MaterialScore = new[]
     {
-        0,
+        0,      // PieceType.Pawn starts at index 1
         100,
         300,
         350,
