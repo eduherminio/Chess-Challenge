@@ -139,6 +139,7 @@ public class MyBot : IChessBot
 
     public Move Think(Board board, Timer timer)
     {
+        bestmoveRoot = Move.NullMove;
         // https://www.chessprogramming.org/Iterative_Deepening
         for(int depth = 1; depth <= 50; depth++) {
             int score = Search(board, timer, -30000, 30000, depth, 0);
@@ -147,6 +148,6 @@ public class MyBot : IChessBot
             if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
                 break;
         }
-        return bestmoveRoot;
+        return bestmoveRoot.IsNull ? board.GetLegalMoves()[0] : bestmoveRoot;
     }
 }
