@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Chess-Challenge\Chess-Challenge.csproj" />
+    <ProjectReference Include="..\Chess-Challenge.Engine\Chess-Challenge.Engine.csproj" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Optimized.ToLower())'=='true'">

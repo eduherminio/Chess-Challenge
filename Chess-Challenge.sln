@@ -19,6 +19,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TeenyLynx.UCI", "TeenyLynx.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TeenyLynx.Encoder", "TeenyLynx.Encoder\TeenyLynx.Encoder.csproj", "{C4B1E90F-499D-46ED-A8C0-FBEC3D26902F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chess-Challenge.Engine", "Chess-Challenge.Engine\Chess-Challenge.Engine.csproj", "{E1EBC760-CB1E-4A43-AB6A-2E6BED1AF9B1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,10 @@ Global
 		{C4B1E90F-499D-46ED-A8C0-FBEC3D26902F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C4B1E90F-499D-46ED-A8C0-FBEC3D26902F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C4B1E90F-499D-46ED-A8C0-FBEC3D26902F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1EBC760-CB1E-4A43-AB6A-2E6BED1AF9B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1EBC760-CB1E-4A43-AB6A-2E6BED1AF9B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1EBC760-CB1E-4A43-AB6A-2E6BED1AF9B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1EBC760-CB1E-4A43-AB6A-2E6BED1AF9B1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

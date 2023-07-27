@@ -18,12 +18,12 @@
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Chess-Challenge.Engine\Chess-Challenge.Engine.csproj" />
+  </ItemGroup>
+
   <PropertyGroup>
     <NoWarn>NUnit2005</NoWarn>
   </PropertyGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\Chess-Challenge\Chess-Challenge.csproj" />
-  </ItemGroup>
 
 </Project>
