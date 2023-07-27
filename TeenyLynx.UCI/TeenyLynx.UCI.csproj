@@ -12,15 +12,17 @@
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Optimized.ToLower())'=='true'">
+    <PublishAot>true</PublishAot>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <Configuration>Release</Configuration>
     <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
     <PublishTrimmed>true</PublishTrimmed>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <!--In favour of tiered compilation-->
     <PublishReadyToRun>false</PublishReadyToRun>
+    <!--In favour of AOT-->
+    <PublishSingleFile>false</PublishSingleFile>
   </PropertyGroup>
 
   <ItemGroup>
