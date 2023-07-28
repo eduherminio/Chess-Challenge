@@ -68,12 +68,12 @@ public class MyBot : IChessBot
         _nodes = 0;
 #endif
 #if DEBUG
-        Console.WriteLine($"\n[{this.GetType().Name}] Searching {_position.GetFenString()} ({_timePerMove}ms to move)");
+        Console.WriteLine($"\n[{GetType().Name}] Searching {_position.GetFenString()} ({_timePerMove}ms to move)");
 #endif
 
         #endregion
 
-        Move bestMove = new();
+        Move bestMove = default;
         try
         {
             bool isMateDetected;
@@ -89,7 +89,7 @@ public class MyBot : IChessBot
 #endif
                 isMateDetected = Abs(bestEvaluation) > 27_000;
 
-                if (!isMateDetected && ((bestEvaluation <= alpha) || (bestEvaluation >= beta)))
+                if (!isMateDetected && (bestEvaluation <= alpha || bestEvaluation >= beta))
                 {
                     alpha = short.MinValue;   // We fell outside the window, so try again with a
                     beta = short.MaxValue;    // full-width window (and the same depth).
@@ -137,10 +137,14 @@ public class MyBot : IChessBot
         if (_position.FiftyMoveCounter >= 100 || _position.IsRepeatedPosition() || _position.IsInsufficientMaterial())
             return 0;
 
-        if (!isQuiescence && _timer.MillisecondsElapsedThisTurn > _timePerMove)
-            throw new();
-
-        //if (!isQuiescence && _position.IsInCheck())    // TODO investigate, this makes the bot suggest null moves either other move
+        if (!isQuiescence)
+            if (_timer.MillisecondsElapsedThisTurn > _timePerMove)
+                throw new();
+            else if (ply > _targetDepth)
+                return _position.GetLegalMoves().Any()//.Length > 0
+                 ? NegaMax(ply, alpha, beta, true)  // Quiescence
+                 : EvaluateFinalPosition(ply);
+        //else if (_position.IsInCheck())           // TODO investigate, this makes the bot suggest null moves either other move
         //    ++_targetDepth;
 
         // TODO: GetLegalMovesNonAlloc
@@ -148,21 +152,16 @@ public class MyBot : IChessBot
         //_position.GetLegalMovesNonAlloc(ref spanLegalMoves);
         //spanLegalMoves.Sort((a, b) => Score(a, ply > Score(b, ply) ? 1 : 0));
 
-        if (!isQuiescence && ply > _targetDepth)
-            return _position.GetLegalMoves().Any()//.Length > 0
-                 ? NegaMax(ply, alpha, beta, true) // Quiescence
-                 : EvaluateFinalPosition(ply);
-
         int pvIndex = _indexes[ply],
             nextPvIndex = _indexes[ply + 1],
             staticEvaluation = 0,
             kingSquare;
-        Move bestMove = _pVTable[pvIndex] = new();
+        Move bestMove = _pVTable[pvIndex] = default;
 
         #region Move sorting
 
         if (!isQuiescence && _isFollowingPV)
-            _isFollowingPV = _position.GetLegalMoves().Any(m => m == _pVTable[ply])
+            _isFollowingPV = _position.GetLegalMoves().Contains(_pVTable[ply])
                 && (_isScoringPV = true);
 
         #endregion
@@ -187,7 +186,7 @@ public class MyBot : IChessBot
 
                         staticEvaluation += (localIsWhiteToMove ? 1 : -1) * (
                             MaterialScore[i]
-                            + Magic[square + 64 * (i - 1)]);
+                            + Magic[square + 64 * i - 64]); // Magic[square + 64 * (i - 1)])
                     }
                 }
 
@@ -198,16 +197,18 @@ public class MyBot : IChessBot
             bitboard = _position.GetPieceBitboard(PieceType.King, true);
             kingSquare = ClearAndGetIndexOfLSB(ref bitboard);
 
-            staticEvaluation += _position.GetPieceBitboard(PieceType.Queen, false) > 0      // White king, no black queens
-                ? Magic[kingSquare + 320]    // Regular king positional values -  64 * ((int)PieceType(King), after regular tables
-                : Magic[kingSquare + 384];   // Endgame king position values - 64 * ((int)PieceType(King) - 1), last regular table
+            staticEvaluation += Magic[kingSquare + (_position.GetPieceBitboard(PieceType.Queen, false) > 0
+                ? 320   // Regular king positional values -  64 * ((int)PieceType(King), after regular tables
+                : 384   // Endgame king position values - 64 * ((int)PieceType(King) - 1), last regular table
+            )];
 
             bitboard = _position.GetPieceBitboard(PieceType.King, false);
             kingSquare = ClearAndGetIndexOfLSB(ref bitboard) ^ 56;
 
-            staticEvaluation -= _position.GetPieceBitboard(PieceType.Queen, true) > 0       // Black king, no white queens
-                ? Magic[kingSquare + 320]    // Regular king positional values -  64 * ((int)PieceType(King), after regular tables
-                : Magic[kingSquare + 384];   // Endgame king position values - 64 * ((int)PieceType(King) - 1), last regular table
+            staticEvaluation -= Magic[kingSquare + (_position.GetPieceBitboard(PieceType.Queen, true) > 0
+                ? 320   // Regular king positional values -  64 * ((int)PieceType(King), after regular tables
+                : 384   // Endgame king position values - 64 * ((int)PieceType(King) - 1), last regular table
+            )];
 
             if (!_position.IsWhiteToMove)
                 staticEvaluation = -staticEvaluation;
@@ -253,7 +254,13 @@ public class MyBot : IChessBot
             {
                 alpha = evaluation;
                 bestMove = _pVTable[pvIndex] = move;
-                CopyPVTableMoves(pvIndex + 1, nextPvIndex, ply);
+
+                #region CopyPVTableMoves
+                if (_pVTable[nextPvIndex].IsNull)
+                    Array.Clear(_pVTable, pvIndex + 1, _pVTable.Length - pvIndex + 1);
+                else
+                    Array.Copy(_pVTable, nextPvIndex, _pVTable, pvIndex + 1, 128 - ply - 1);
+                #endregion
 
                 // 🔍 History moves
                 //if (!move.IsCapture) // No isNotQuiescence check needed, in quiecence there will never be non capure moves
@@ -315,14 +322,6 @@ public class MyBot : IChessBot
         //}
 
         return 0;
-    }
-
-    private void CopyPVTableMoves(int target, int source, int ply)
-    {
-        if (_pVTable[source].IsNull)
-            Array.Clear(_pVTable, target, _pVTable.Length - target);
-        else
-            Array.Copy(_pVTable, source, _pVTable, target, 128 - ply - 1);
     }
 
     private int EvaluateFinalPosition(int ply) => _position.IsInCheckmate()
