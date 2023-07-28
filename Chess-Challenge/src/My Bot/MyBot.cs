@@ -80,7 +80,7 @@ public class MyBot : IChessBot
             int msSpentPerDepth = 0;
             do
             {
-                //AspirationWindows_SearchAgain:
+                AspirationWindows_SearchAgain:
                 _isFollowingPV = true;
 #if DEBUG
                 bestEvaluation = NegaMax(0, alpha, beta, false);
@@ -89,20 +89,20 @@ public class MyBot : IChessBot
 #endif
                 isMateDetected = Abs(bestEvaluation) > 27_000;
 
-                //if (!isMateDetected && ((bestEvaluation <= alpha) || (bestEvaluation >= beta)))
-                //{
-                alpha = short.MinValue;   // We fell outside the window, so try again with a
-                beta = short.MaxValue;    // full-width window (and the same depth).
+                if (!isMateDetected && ((bestEvaluation <= alpha) || (bestEvaluation >= beta)))
+                {
+                    alpha = short.MinValue;   // We fell outside the window, so try again with a
+                    beta = short.MaxValue;    // full-width window (and the same depth).
 
-                //    goto AspirationWindows_SearchAgain;
-                //}
+                    goto AspirationWindows_SearchAgain;
+                }
 
                 bestMove = _pVTable[0];
 #if DEBUG || UCI
                 Console.WriteLine($"info depth {_targetDepth} score {(isMateDetected ? "mate 99" : $"cp {bestEvaluation}")} nodes {_nodes} nps {Convert.ToInt64(Clamp(_nodes / ((0.001 * _timer.MillisecondsElapsedThisTurn) + 1), 0, long.MaxValue))} time {_timer.MillisecondsElapsedThisTurn} pv {string.Join(' ', _pVTable.TakeWhile(m => !m.IsNull).Select(m => m.ToString()[7..^1]))}");
 #endif
-                //alpha = bestEvaluation - 50;
-                //beta = bestEvaluation + 50;
+                alpha = bestEvaluation - 50;
+                beta = bestEvaluation + 50;
 
                 //Array.Copy(_killerMoves, _previousKillerMoves, _killerMoves.Length);
 
