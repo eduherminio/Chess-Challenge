@@ -23,8 +23,8 @@ public class MyBot : IChessBot
 
     readonly int[] _indexes = new int[129];
     readonly Move[] _pVTable = new Move[8_256];   // 128 * (128 + 1) / 2
-    //readonly int[,] _previousKillerMoves = new int[2, 128];
-    //readonly int[,] _killerMoves = new int[2, 128];
+    readonly int[,] _previousKillerMoves = new int[2, 128];
+    readonly int[,] _killerMoves = new int[2, 128];
     //readonly int[,] _historyMoves = new int[12, 64];
 
     bool _isFollowingPV, _isScoringPV;
@@ -47,7 +47,7 @@ public class MyBot : IChessBot
         _targetDepth = 1;
         _isScoringPV = false;
         Array.Clear(_pVTable);
-        //Array.Clear(_killerMoves);
+        Array.Clear(_killerMoves);
         //Array.Clear(_historyMoves);
 
         int movesToGo = 100 - board.PlyCount >> 1,
@@ -104,7 +104,7 @@ public class MyBot : IChessBot
                 //alpha = bestEvaluation - 50;
                 //beta = bestEvaluation + 50;
 
-                //Array.Copy(_killerMoves, _previousKillerMoves, _killerMoves.Length);
+                Array.Copy(_killerMoves, _previousKillerMoves, _killerMoves.Length);
 
                 msSpentPerDepth = timer.MillisecondsElapsedThisTurn - msSpentPerDepth;
                 ++_targetDepth;
@@ -232,7 +232,7 @@ public class MyBot : IChessBot
         if (isQuiescence && moves.Length == 0)
             return staticEvaluation;
 
-        foreach (var move in moves.OrderByDescending(move => Score(move, ply/*, _killerMoves*/)))
+        foreach (var move in moves.OrderByDescending(move => Score(move, ply, isQuiescence)))
         {
             _position.MakeMove(move);
             var evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence); // Invokes itself, either Negamax or Quiescence
@@ -240,12 +240,14 @@ public class MyBot : IChessBot
 
             // Fail-hard beta-cutoff - refutation found, no need to keep searching this line
             if (evaluation >= beta)
+            {
+                if (!isQuiescence && !move.IsCapture)
+                {
+                    _killerMoves[1, ply] = _killerMoves[0, ply];
+                    _killerMoves[0, ply] = move.RawValue;
+                }
                 return beta;
-            //if (isNotQuiescence && !move.IsCapture)
-            //{
-            //    _killerMoves[1, ply] = _killerMoves[0, ply];
-            //    _killerMoves[0, ply] = move.RawValue;
-            //}
+            }
 
             if (evaluation > alpha)
             {
@@ -268,9 +270,9 @@ public class MyBot : IChessBot
         return alpha;
     }
 
-    public /*internal*/ int Score(Move move, int depth/*, int[,]? killerMoves = null,  int[,]? historyMoves = null*/)
+    public /*internal*/ int Score(Move move, int ply, bool isQuiescence)
     {
-        if (_isScoringPV && move == _pVTable[depth])
+        if (_isScoringPV && move == _pVTable[ply])
         {
             _isScoringPV = false;
 
@@ -293,19 +295,15 @@ public class MyBot : IChessBot
                 Magic[441 + targetPiece + 6 * (int)move.MovePieceType];      // MVVLVATest.cs, current expression as a simplification of
                                                                              // 448 + targetPiece - 1 + 6 * ((int)move.MovePieceType - 1)
         }
-        //else
-        //{
-        //    // 1st killer move
-        //    if (killerMoves?[0, depth] == move.RawValue)
-        //    {
-        //        return 9_000;
-        //    }
+        else if (!isQuiescence)
+            //{
+            // 1st killer move
+            if (_killerMoves[0, ply] == move.RawValue)
+                return 9_000;
 
-        //    // 2nd killer move
-        //    else if (killerMoves?[1, depth] == move.RawValue)
-        //    {
-        //        return 8_000;
-        //    }
+            // 2nd killer move
+            else if (_killerMoves[1, ply] == move.RawValue)
+                return 8_000;
 
         //    // History move
         //    //else if (historyMoves is not null)
