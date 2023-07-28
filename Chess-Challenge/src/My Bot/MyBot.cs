@@ -137,7 +137,7 @@ public class MyBot : IChessBot
         if (_position.FiftyMoveCounter >= 100 || _position.IsRepeatedPosition() || _position.IsInsufficientMaterial())
             return 0;
 
-        if (!isQuiescence && _timer.MillisecondsElapsedThisTurn > _timePerMove)
+        if (!isQuiescence && ply > 3 && _timer.MillisecondsElapsedThisTurn > _timePerMove)
             throw new();
 
         //if (!isQuiescence && _position.IsInCheck())    // TODO investigate, this makes the bot suggest null moves either other move
