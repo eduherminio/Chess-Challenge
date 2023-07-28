@@ -143,15 +143,14 @@ public class MyBot : IChessBot
         //if (!isQuiescence && _position.IsInCheck())    // TODO investigate, this makes the bot suggest null moves either other move
         //    ++_targetDepth;
 
-        // TODO: GetLegalMovesNonAlloc
-        //Span<Move> spanLegalMoves = stackalloc Move[256];
-        //_position.GetLegalMovesNonAlloc(ref spanLegalMoves);
-        //spanLegalMoves.Sort((a, b) => Score(a, ply > Score(b, ply) ? 1 : 0));
-
         if (!isQuiescence && ply > _targetDepth)
-            return _position.GetLegalMoves().Any()//.Length > 0
-                 ? NegaMax(ply, alpha, beta, true) // Quiescence
-                 : EvaluateFinalPosition(ply);
+        {
+            Span<Move> legalMoves = stackalloc Move[256];
+            _position.GetLegalMovesNonAlloc(ref legalMoves);
+            return legalMoves.IsEmpty
+                 ? EvaluateFinalPosition(ply)
+                 : NegaMax(ply, alpha, beta, true); // Quiescence
+        }
 
         int pvIndex = _indexes[ply],
             nextPvIndex = _indexes[ply + 1],
@@ -162,8 +161,12 @@ public class MyBot : IChessBot
         #region Move sorting
 
         if (!isQuiescence && _isFollowingPV)
-            _isFollowingPV = _position.GetLegalMoves().Any(m => m == _pVTable[ply])
+        {
+            Span<Move> legalMoves = stackalloc Move[256];
+            _position.GetLegalMovesNonAlloc(ref legalMoves);
+            _isFollowingPV = legalMoves.Contains(_pVTable[ply])
                 && (_isScoringPV = true);
+        }
 
         #endregion
 
@@ -227,12 +230,14 @@ public class MyBot : IChessBot
         ++_nodes;
 #endif
 
-        var moves = _position.GetLegalMoves(isQuiescence);
-
+        Span<Move> moves = stackalloc Move[256];
+        _position.GetLegalMovesNonAlloc(ref moves, isQuiescence);
         if (isQuiescence && moves.Length == 0)
             return staticEvaluation;
 
-        foreach (var move in moves.OrderByDescending(move => Score(move, ply/*, _killerMoves*/)))
+        moves.Sort((a, b) => Score(a, ply/*, _killerMoves*/) > Score(b, ply/*, _killerMoves*/) ? 1 : 0);
+
+        foreach (var move in moves)
         {
             _position.MakeMove(move);
             var evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence); // Invokes itself, either Negamax or Quiescence
@@ -261,8 +266,17 @@ public class MyBot : IChessBot
             }
         }
 
-        if (bestMove.IsNull && _position.GetLegalMoves().Length == 0)
-            return EvaluateFinalPosition(ply);
+        if (bestMove.IsNull)
+        {
+            if (isQuiescence)
+            {
+                moves = stackalloc Move[256];
+                _position.GetLegalMovesNonAlloc(ref moves);
+            }
+
+            if (moves.IsEmpty)
+                return EvaluateFinalPosition(ply);
+        }
 
         // Node fails low
         return alpha;
