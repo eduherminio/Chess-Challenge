@@ -156,7 +156,8 @@ public class MyBot : IChessBot
         int pvIndex = _indexes[ply],
             nextPvIndex = _indexes[ply + 1],
             staticEvaluation = 0,
-            kingSquare;
+            kingSquare,
+            movesSearched  = 0;
         Move bestMove = _pVTable[pvIndex] = new();
 
         if (isQuiescence)
@@ -232,17 +233,16 @@ public class MyBot : IChessBot
         if (isQuiescence && moves.Length == 0)
             return staticEvaluation;
 
-        int movesSearched = 0;
         foreach (var move in moves.OrderByDescending(move => Score(move, ply/*, _killerMoves*/)))
         {
             _position.MakeMove(move);
             int evaluation;
+            void RegularEval() => evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
+
             if (movesSearched == 0 || isQuiescence)     // Invokes itself, either Negamax or Quiescence
-                evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
-            else if
-            //{
-            //// 🔍 Late Move Reduction (LMR)
-            /*if*/ (movesSearched >= 4                  // LMR_FullDepthMoves
+                RegularEval();
+            else if     // 🔍 Late Move Reduction (LMR)
+            (movesSearched >= 4                  // LMR_FullDepthMoves
                 && ply >= 3                         // LMR_ReductionLimit
                 && !_isFollowingPV
                 && !_position.IsInCheck()
@@ -251,33 +251,28 @@ public class MyBot : IChessBot
                 && !move.IsPromotion)
             {
                 // Search with reduced depth
-                evaluation = -NegaMax(ply + 1 + 1, -alpha - 1, -alpha, isQuiescence);   // +1: LMR_DepthReduction
+                evaluation = -NegaMax(ply + 2, -alpha - 1, -alpha, isQuiescence);   // second +1: LMR_DepthReduction
             }
-            //else
-            //{
-            //    // Ensuring full depth search takes place
-            //    evaluation = alpha + 1;
-            //}
+            else  // Ensuring full depth search takes place
+                evaluation = 99999;
 
-            //if (evaluation > alpha)
-            //{
-            // 🔍 Principal Variation Search (PVS)
-            //if (!bestMove.IsNull)
-            //{
-            //    // Optimistic search, validating that the rest of the moves are worse than bestmove.
-            //    // It should produce more cutoffs and therefore be faster.
-            //    // https://web.archive.org/web/20071030220825/http://www.brucemo.com/compchess/programming/pvs.htm
+            if (evaluation > alpha)
+                // 🔍 Principal Variation Search(PVS)
+                if (!bestMove.IsNull)
+                {
+                    // Optimistic search, validating that the rest of the moves are worse than bestmove.
+                    // It should produce more cutoffs and therefore be faster.
+                    // https://web.archive.org/web/20071030220825/http://www.brucemo.com/compchess/programming/pvs.htm
 
-            //    // Search with full depth but narrowed score bandwidth
-            //    evaluation = -NegaMax(ply + 1, -alpha - 1, -alpha, isQuiescence);
+                    // Search with full depth but narrowed score bandwidth
+                    evaluation = -NegaMax(ply + 1, -alpha - 1, -alpha, isQuiescence);
 
-            //    if (evaluation > alpha && evaluation < beta)    // Hipothesis invalidated -> search with full depth and full score bandwidth
-            //        evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
-            //}
-            else
-                evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
-            //}
-            //}
+                    if (evaluation > alpha && evaluation < beta)    // Hipothesis invalidated -> search with full depth and full score bandwidth
+                        RegularEval();
+                }
+                else
+                    RegularEval();
+
             _position.UndoMove(move);
 
             // Fail-hard beta-cutoff - refutation found, no need to keep searching this line
