@@ -256,10 +256,12 @@ public class MyBot : IChessBot
                 bestMove = _pVTable[pvIndex] = move;
 
                 #region CopyPVTableMoves
+
                 if (_pVTable[nextPvIndex].IsNull)
-                    Array.Clear(_pVTable, pvIndex + 1, _pVTable.Length - pvIndex + 1);
+                    Array.Clear(_pVTable, pvIndex + 1, _pVTable.Length - pvIndex - 1);
                 else
-                    Array.Copy(_pVTable, nextPvIndex, _pVTable, pvIndex + 1, 128 - ply - 1);
+                    Array.Copy(_pVTable, nextPvIndex, _pVTable, pvIndex + 1, 127 - ply);    // 128 - ply - 1
+
                 #endregion
 
                 // 🔍 History moves
