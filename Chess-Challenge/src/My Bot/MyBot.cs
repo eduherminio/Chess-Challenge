@@ -159,14 +159,6 @@ public class MyBot : IChessBot
             kingSquare;
         Move bestMove = _pVTable[pvIndex] = new();
 
-        #region Move sorting
-
-        if (!isQuiescence && _isFollowingPV)
-            _isFollowingPV = _position.GetLegalMoves().Any(m => m == _pVTable[ply])
-                && (_isScoringPV = true);
-
-        #endregion
-
         if (isQuiescence)
         {
             #region Static evaluation
@@ -227,15 +219,65 @@ public class MyBot : IChessBot
         ++_nodes;
 #endif
 
+        #region Move sorting
+
+        if (!isQuiescence && _isFollowingPV)
+            _isFollowingPV = _position.GetLegalMoves().Any(m => m == _pVTable[ply])
+                && (_isScoringPV = true);
+
+        #endregion
+
         var moves = _position.GetLegalMoves(isQuiescence);
 
         if (isQuiescence && moves.Length == 0)
             return staticEvaluation;
 
+        int movesSearched = 0;
         foreach (var move in moves.OrderByDescending(move => Score(move, ply/*, _killerMoves*/)))
         {
             _position.MakeMove(move);
-            var evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence); // Invokes itself, either Negamax or Quiescence
+            int evaluation;
+            if (movesSearched == 0 || isQuiescence)     // Invokes itself, either Negamax or Quiescence
+                evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
+            else
+            //{
+            //// 🔍 Late Move Reduction (LMR)
+            //if (movesSearched >= Configuration.EngineSettings.LMR_FullDepthMoves
+            //    && ply >= Configuration.EngineSettings.LMR_ReductionLimit
+            //    && !_isFollowingPV
+            //    && !isInCheck
+            //    //&& !newPosition.IsInCheck()
+            //    && !move.IsCapture()
+            //    && move.PromotedPiece() == default)
+            //{
+            //    // Search with reduced depth
+            //    evaluation = -NegaMax(in newPosition, minDepth, targetDepth, ply + 1 + Configuration.EngineSettings.LMR_DepthReduction, -alpha - 1, -alpha, isVerifyingNullMoveCutOff);
+            //}
+            //else
+            //{
+            //    // Ensuring full depth search takes place
+            //    evaluation = alpha + 1;
+            //}
+
+            //if (evaluation > alpha)
+            //{
+            // 🔍 Principal Variation Search (PVS)
+            if (!bestMove.IsNull)
+            {
+                // Optimistic search, validating that the rest of the moves are worse than bestmove.
+                // It should produce more cutoffs and therefore be faster.
+                // https://web.archive.org/web/20071030220825/http://www.brucemo.com/compchess/programming/pvs.htm
+
+                // Search with full depth but narrowed score bandwidth
+                evaluation = -NegaMax(ply + 1, -alpha - 1, -alpha, isQuiescence);
+
+                if (evaluation > alpha && evaluation < beta)    // Hipothesis invalidated -> search with full depth and full score bandwidth
+                    evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
+            }
+            else
+                evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
+            //}
+            //}
             _position.UndoMove(move);
 
             // Fail-hard beta-cutoff - refutation found, no need to keep searching this line
@@ -259,6 +301,7 @@ public class MyBot : IChessBot
                 //    _historyMoves[(int)move.MovePieceType, move.TargetSquare.Index] += ply << 2;
                 //}
             }
+            ++movesSearched;
         }
 
         if (bestMove.IsNull && _position.GetLegalMoves().Length == 0)
