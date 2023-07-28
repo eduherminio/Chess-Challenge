@@ -1,5 +1,5 @@
-﻿#define DEBUG
-#define UCI
+﻿//#define DEBUG
+//#define UCI
 
 #pragma warning disable RCS1001, S125 // Add braces (when expression spans over multiple lines) - Tokens are tokens
 
