@@ -25,7 +25,7 @@ public class MyBot : IChessBot
     readonly Move[] _pVTable = new Move[8_256];   // 128 * (128 + 1) / 2
     //readonly int[,] _previousKillerMoves = new int[2, 128];
     //readonly int[,] _killerMoves = new int[2, 128];
-    //readonly int[,] _historyMoves = new int[12, 64];
+    readonly int[,] _historyMoves = new int[12, 64];
 
     bool _isFollowingPV, _isScoringPV;
 
@@ -48,7 +48,7 @@ public class MyBot : IChessBot
         _isScoringPV = false;
         Array.Clear(_pVTable);
         //Array.Clear(_killerMoves);
-        //Array.Clear(_historyMoves);
+        Array.Clear(_historyMoves);
 
         int movesToGo = 100 - board.PlyCount >> 1,
             alpha = short.MinValue,
@@ -232,7 +232,7 @@ public class MyBot : IChessBot
         if (isQuiescence && moves.Length == 0)
             return staticEvaluation;
 
-        foreach (var move in moves.OrderByDescending(move => Score(move, ply/*, _killerMoves*/)))
+        foreach (var move in moves.OrderByDescending(move => Score(move, ply, isQuiescence)))
         {
             _position.MakeMove(move);
             var evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence); // Invokes itself, either Negamax or Quiescence
@@ -254,10 +254,10 @@ public class MyBot : IChessBot
                 CopyPVTableMoves(pvIndex + 1, nextPvIndex, ply);
 
                 // 🔍 History moves
-                //if (!move.IsCapture) // No isNotQuiescence check needed, in quiecence there will never be non capure moves
-                //{
-                //    _historyMoves[(int)move.MovePieceType, move.TargetSquare.Index] += ply << 2;
-                //}
+                if (!move.IsCapture) // No isNotQuiescence check needed, in quiecence there will never be non capure moves
+                {
+                    _historyMoves[(int)move.MovePieceType, move.TargetSquare.Index] += ply << 2;
+                }
             }
         }
 
@@ -268,7 +268,7 @@ public class MyBot : IChessBot
         return alpha;
     }
 
-    public /*internal*/ int Score(Move move, int depth/*, int[,]? killerMoves = null,  int[,]? historyMoves = null*/)
+    public /*internal*/ int Score(Move move, int depth, bool isQuiescence)
     {
         if (_isScoringPV && move == _pVTable[depth])
         {
@@ -307,16 +307,11 @@ public class MyBot : IChessBot
         //        return 8_000;
         //    }
 
-        //    // History move
-        //    //else if (historyMoves is not null)
-        //    //{
-        //    //    return historyMoves[(int)move.MovePieceType + offset, move.TargetSquare.Index];
-        //    //}
-
-        //    return 0;
-        //}
-
-        return 0;
+        // History move
+        return _historyMoves[
+            (int)move.MovePieceType - 1 + (6 * (_position.IsWhiteToMove ? 1 : 0)),
+            move.TargetSquare.Index];   // Initialized to 0
+                                        //}
     }
 
     private void CopyPVTableMoves(int target, int source, int ply)
