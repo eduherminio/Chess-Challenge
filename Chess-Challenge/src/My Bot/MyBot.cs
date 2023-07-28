@@ -239,20 +239,20 @@ public class MyBot : IChessBot
             int evaluation;
             if (movesSearched == 0 || isQuiescence)     // Invokes itself, either Negamax or Quiescence
                 evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
-            else
+            else if
             //{
             //// 🔍 Late Move Reduction (LMR)
-            //if (movesSearched >= Configuration.EngineSettings.LMR_FullDepthMoves
-            //    && ply >= Configuration.EngineSettings.LMR_ReductionLimit
-            //    && !_isFollowingPV
-            //    && !isInCheck
-            //    //&& !newPosition.IsInCheck()
-            //    && !move.IsCapture()
-            //    && move.PromotedPiece() == default)
-            //{
-            //    // Search with reduced depth
-            //    evaluation = -NegaMax(in newPosition, minDepth, targetDepth, ply + 1 + Configuration.EngineSettings.LMR_DepthReduction, -alpha - 1, -alpha, isVerifyingNullMoveCutOff);
-            //}
+            /*if*/ (movesSearched >= 4                  // LMR_FullDepthMoves
+                && ply >= 3                         // LMR_ReductionLimit
+                && !_isFollowingPV
+                && !_position.IsInCheck()
+                //&& !newPosition.IsInCheck()
+                && !move.IsCapture
+                && !move.IsPromotion)
+            {
+                // Search with reduced depth
+                evaluation = -NegaMax(ply + 1 + 1, -alpha - 1, -alpha, isQuiescence);   // +1: LMR_DepthReduction
+            }
             //else
             //{
             //    // Ensuring full depth search takes place
@@ -262,18 +262,18 @@ public class MyBot : IChessBot
             //if (evaluation > alpha)
             //{
             // 🔍 Principal Variation Search (PVS)
-            if (!bestMove.IsNull)
-            {
-                // Optimistic search, validating that the rest of the moves are worse than bestmove.
-                // It should produce more cutoffs and therefore be faster.
-                // https://web.archive.org/web/20071030220825/http://www.brucemo.com/compchess/programming/pvs.htm
+            //if (!bestMove.IsNull)
+            //{
+            //    // Optimistic search, validating that the rest of the moves are worse than bestmove.
+            //    // It should produce more cutoffs and therefore be faster.
+            //    // https://web.archive.org/web/20071030220825/http://www.brucemo.com/compchess/programming/pvs.htm
 
-                // Search with full depth but narrowed score bandwidth
-                evaluation = -NegaMax(ply + 1, -alpha - 1, -alpha, isQuiescence);
+            //    // Search with full depth but narrowed score bandwidth
+            //    evaluation = -NegaMax(ply + 1, -alpha - 1, -alpha, isQuiescence);
 
-                if (evaluation > alpha && evaluation < beta)    // Hipothesis invalidated -> search with full depth and full score bandwidth
-                    evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
-            }
+            //    if (evaluation > alpha && evaluation < beta)    // Hipothesis invalidated -> search with full depth and full score bandwidth
+            //        evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
+            //}
             else
                 evaluation = -NegaMax(ply + 1, -beta, -alpha, isQuiescence);
             //}
