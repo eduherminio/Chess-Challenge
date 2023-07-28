@@ -143,13 +143,14 @@ public class MyBot : IChessBot
         //if (!isQuiescence && _position.IsInCheck())    // TODO investigate, this makes the bot suggest null moves either other move
         //    ++_targetDepth;
 
-        Span<Move> moves = stackalloc Move[256];
-        _position.GetLegalMovesNonAlloc(ref moves, isQuiescence);
-
         if (!isQuiescence && ply > _targetDepth)
-            return moves.IsEmpty
+        {
+            Span<Move> legalMoves = stackalloc Move[256];
+            _position.GetLegalMovesNonAlloc(ref legalMoves);
+            return legalMoves.IsEmpty
                  ? EvaluateFinalPosition(ply)
                  : NegaMax(ply, alpha, beta, true); // Quiescence
+        }
 
         int pvIndex = _indexes[ply],
             nextPvIndex = _indexes[ply + 1],
@@ -160,8 +161,12 @@ public class MyBot : IChessBot
         #region Move sorting
 
         if (!isQuiescence && _isFollowingPV)
-            _isFollowingPV = moves.Contains(_pVTable[ply])
+        {
+            Span<Move> legalMoves = stackalloc Move[256];
+            _position.GetLegalMovesNonAlloc(ref legalMoves);
+            _isFollowingPV = legalMoves.Contains(_pVTable[ply])
                 && (_isScoringPV = true);
+        }
 
         #endregion
 
@@ -225,6 +230,8 @@ public class MyBot : IChessBot
         ++_nodes;
 #endif
 
+        Span<Move> moves = stackalloc Move[256];
+        _position.GetLegalMovesNonAlloc(ref moves, isQuiescence);
         if (isQuiescence && moves.Length == 0)
             return staticEvaluation;
 
