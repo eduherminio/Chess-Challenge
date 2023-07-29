@@ -21,11 +21,10 @@ public class MyBot : IChessBot
 #endif
         ;
 
-    readonly int[] _indexes = new int[129];
     readonly Move[] _pVTable = new Move[8_256];   // 128 * (128 + 1) / 2
-    readonly int[,] _previousKillerMoves = new int[2, 128];
-    readonly int[,] _killerMoves = new int[2, 128];
-    //readonly int[,] _historyMoves = new int[12, 64];
+    readonly int[,] _previousKillerMoves = new int[2, 128],
+                    _killerMoves = new int[2, 128];
+    // _historyMoves = new int[12, 64];
 
     bool _isFollowingPV, _isScoringPV;
 
@@ -51,8 +50,8 @@ public class MyBot : IChessBot
 
         int movesToGo = 100 - board.PlyCount >> 1,
             targetDepth = 1,
-            alpha = short.MinValue,
-            beta = short.MaxValue
+            alpha = -32_768,    //  short.MinValue
+            beta = 32_767       //  short.MaxValue+
 #if DEBUG
             , bestEvaluation = 0;
 #else
@@ -91,8 +90,8 @@ public class MyBot : IChessBot
 
                 if (!isMateDetected && (bestEvaluation <= alpha || bestEvaluation >= beta))
                 {
-                    alpha = short.MinValue;   // We fell outside the window, so try again with a
-                    beta = short.MaxValue;    // full-width window (and the same depth).
+                    alpha = -32_768;    // short.MinValuem  We fell outside the window, so try again with a
+                    beta = 32_767;      // short.MaxValue     full-width window (and the same depth).
 
                     goto AspirationWindows_SearchAgain;
                 }
@@ -118,7 +117,6 @@ public class MyBot : IChessBot
         )
         {
 #if DEBUG
-            ;
             if (!e.Message.StartsWith("Exception of type 'System.Exception' was thrown"))
             {
                 Console.WriteLine($"Exception: {e.Message}\n{e.StackTrace}");
@@ -331,23 +329,23 @@ public class MyBot : IChessBot
         ? -30_000 + 10 * ply
         : 0;
 
-    /*static*/
-    readonly int[] MaterialScore = new[]
-{
-        0,      // PieceType.Pawn starts at index 1
-        100,
-        300,
-        350,
-        500,
-        1_000
-    };
-
-    #region PQST and MVVLVA
+    #region Material score, PQST and MVVLVA
 
     /// <summary>
     /// P PSQT | N PSQT | B PSQT | R PSQT | Q PSQT | K PSQT | K endgame PSQT | MVVLVA
     /// </summary>
-    public /*internal static*/ readonly int[] Magic =
+    public /*internal static*/ readonly int[]
+        _indexes = new int[129],
+        MaterialScore = new[]
+        {
+            0,      // PieceType.Pawn starts at index 1
+            100,
+            300,
+            350,
+            500,
+            1_000
+        },
+        Magic =
         new[/*41*/]
         {
                 24868030789173962581061818970m, 27962881072575429945784425040m, 34164717750142730454335511130m,
