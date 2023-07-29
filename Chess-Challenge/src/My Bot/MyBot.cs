@@ -285,7 +285,7 @@ public class MyBot : IChessBot
         {
             _isScoringPV = false;
 
-            return 20_000;
+            return 1_000_000;
         }
 
         if (move.IsCapture)
