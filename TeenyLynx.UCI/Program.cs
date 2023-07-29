@@ -13,104 +13,111 @@ MyBot myBot = new MyBot();
 
 while (true)
 {
-    var line = Console.ReadLine();
-    var tokens = line.Split();
-
-    if (tokens[0] == "quit")
+    try
     {
-        break;
-    }
+        var line = Console.ReadLine();
+        var tokens = line.Split();
 
-    if (tokens[0] == "uci")
-    {
-        Console.WriteLine($"id name TeenyLynx {GetVersion()}");
-        Console.WriteLine("id author Eduardo Cáceres");
-        Console.WriteLine("uciok");
-    }
-
-    if (tokens[0] == "option")
-    {
-        Console.WriteLine("option name UCI_Opponent type string");
-        Console.WriteLine("option name UCI_EngineAbout type string default TeenyLynx by Eduardo Cáceres, see https://github.com/lynx-chess/TeenyLynx");
-    }
-
-    if (tokens[0] == "isready")
-    {
-        Console.WriteLine("readyok");
-    }
-
-    if (tokens[0] == "position")
-    {
-        int nextIndex;
-
-        if (tokens[1] == "startpos")
+        if (tokens[0] == "quit")
         {
-            board = Board.CreateBoardFromFEN(startFen);
-            nextIndex = 2;
+            break;
         }
-        else if (tokens[1] == "fen")
+
+        if (tokens[0] == "uci")
         {
-            var fen = "";
-            for (int i = 2; i < 8; i++)
+            Console.WriteLine($"id name TeenyLynx {GetVersion()}");
+            Console.WriteLine("id author Eduardo Cáceres");
+            Console.WriteLine("uciok");
+        }
+
+        if (tokens[0] == "option")
+        {
+            Console.WriteLine("option name UCI_Opponent type string");
+            Console.WriteLine("option name UCI_EngineAbout type string default TeenyLynx by Eduardo Cáceres, see https://github.com/lynx-chess/TeenyLynx");
+        }
+
+        if (tokens[0] == "isready")
+        {
+            Console.WriteLine("readyok");
+        }
+
+        if (tokens[0] == "position")
+        {
+            int nextIndex;
+
+            if (tokens[1] == "startpos")
             {
+                board = Board.CreateBoardFromFEN(startFen);
+                nextIndex = 2;
+            }
+            else if (tokens[1] == "fen")
+            {
+                var fen = "";
+                for (int i = 2; i < 8; i++)
+                {
 #pragma warning disable S1643 // Strings should not be concatenated using '+' in a loop - it actually depends on the size
-                fen += tokens[i] + " ";
+                    fen += tokens[i] + " ";
 #pragma warning restore S1643 // Strings should not be concatenated using '+' in a loop
+                }
+
+                board = Board.CreateBoardFromFEN(fen);
+                nextIndex = 8;
+            }
+            else
+            {
+                continue;
             }
 
-            board = Board.CreateBoardFromFEN(fen);
-            nextIndex = 8;
-        }
-        else
-        {
-            continue;
+            if (tokens.Length <= nextIndex || tokens[nextIndex] != "moves")
+            {
+                continue;
+            }
+
+            for (int i = nextIndex + 1; i < tokens.Length; i++)
+            {
+                Move move = new Move(tokens[i], board);
+                board.MakeMove(move);
+            }
         }
 
-        if (tokens.Length <= nextIndex || tokens[nextIndex] != "moves")
+        if (tokens[0] == "go")
         {
-            continue;
-        }
+            int allocatedTime = 0, wTime = 0, bTime = 0, wInc = 0, bInc = 0;
 
-        for (int i = nextIndex + 1; i < tokens.Length; i++)
-        {
-            Move move = new Move(tokens[i], board);
-            board.MakeMove(move);
+            for (int i = 1; i < tokens.Length; i += 2)
+            {
+                var type = tokens[i];
+                int value = 0;
+
+                if (tokens.Length > i + 1) value = int.Parse(tokens[i + 1]);
+
+                if (type == "movetime") allocatedTime = (int)(value * 0.95);
+
+                if (type == "wtime") wTime = value;
+
+                if (type == "btime") bTime = value;
+
+                if (type == "winc") wInc = value;
+
+                if (type == "binc") bInc = value;
+            }
+
+            if (allocatedTime == 0)
+            {
+                allocatedTime = board.IsWhiteToMove
+                    ? wTime + wInc
+                    : bTime + bInc;
+            }
+
+            Timer timer = new Timer(allocatedTime);
+            Move move = myBot.Think(board, timer);
+
+            Console.WriteLine("bestmove " + GetMoveNameUCI(move));
         }
     }
-
-    if (tokens[0] == "go")
+    catch (Exception e)
     {
-        int allocatedTime = 0, wTime = 0, bTime = 0, wInc = 0, bInc = 0;
-
-        for (int i = 1; i < tokens.Length; i += 2)
-        {
-            var type = tokens[i];
-            int value = 0;
-
-            if (tokens.Length > i + 1) value = int.Parse(tokens[i + 1]);
-
-            if (type == "movetime") allocatedTime = (int)(value * 0.95);
-
-            if (type == "wtime") wTime = value;
-
-            if (type == "btime") bTime = value;
-
-            if (type == "winc") wInc = value;
-
-            if (type == "binc") bInc = value;
-        }
-
-        if (allocatedTime == 0)
-        {
-            allocatedTime = board.IsWhiteToMove
-                ? wTime + wInc
-                : bTime + bInc;
-        }
-
-        Timer timer = new Timer(allocatedTime);
-        Move move = myBot.Think(board, timer);
-
-        Console.WriteLine("bestmove " + GetMoveNameUCI(move));
+        Console.WriteLine(e.Message);
     }
 }
 
