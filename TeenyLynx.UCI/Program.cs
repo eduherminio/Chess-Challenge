@@ -53,7 +53,7 @@ while (true)
             else if (tokens[1] == "fen")
             {
                 var fen = "";
-                for (int i = 2; i < 8; i++)
+                for (int i = 2; i < tokens.Length; i++)
                 {
 #pragma warning disable S1643 // Strings should not be concatenated using '+' in a loop - it actually depends on the size
                     fen += tokens[i] + " ";
@@ -118,6 +118,7 @@ while (true)
     catch (Exception e)
     {
         Console.WriteLine(e.Message);
+        Console.WriteLine(e.StackTrace);
     }
 }
 
