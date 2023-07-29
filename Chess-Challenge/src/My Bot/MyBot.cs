@@ -363,8 +363,7 @@ public class MyBot : IChessBot
                 31688813875635234031847171167m, 32611465967480339888542278758m, 31990068614427286261316681075m,
                 31368671261374232633132022641m, 79228162514264337591623186799m
         }
-        .SelectMany(decimal.GetBits)
-        .Where((_, i) => i % 4 != 3)        // Removes non-integer part of the Decimal
+        .SelectMany(x => decimal.GetBits(x).Take(3))    // Removes non-integer part of the Decimal
         .SelectMany(GetBytes)
         //.Where(b => b < byte.MaxValue)    // Removes extra-padding, given the array length could not be multiple of 12
         .Select(b => b - 90)

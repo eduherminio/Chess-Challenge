@@ -278,8 +278,7 @@ public static class TeenyLynxEncoder
     public static int[] Decode(decimal[] encodedValues)
     {
         return encodedValues
-            .SelectMany(decimal.GetBits)
-            .Where((_, i) => i % 4 != 3)
+            .SelectMany(x => decimal.GetBits(x).Take(3))
             .SelectMany(BitConverter.GetBytes)
             .Where(b => b < byte.MaxValue)
             .Select(b => b - ConstantIncrease)
