@@ -65,4 +65,8 @@
     <DefineConstants Condition="'$(UCI)' != ''">$(DefineConstants);UCI</DefineConstants>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <DefineConstants Condition="'$(DEBUG)' != ''">$(DefineConstants);UCI;DEBUG</DefineConstants>
+  </PropertyGroup>
+
 </Project>
