@@ -60,8 +60,7 @@ public class MyBot : IChessBot
 
         #region Time management
 
-        movesToGo = Clamp(movesToGo, 40, 100);
-        _timePerMove = Clamp(timer.MillisecondsRemaining / movesToGo, 1, 2000);
+        _timePerMove = timer.MillisecondsRemaining / 30;
 
 #if DEBUG || UCI
         _nodes = 0;
