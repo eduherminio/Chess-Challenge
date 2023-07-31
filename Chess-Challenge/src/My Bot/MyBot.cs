@@ -48,8 +48,7 @@ public class MyBot : IChessBot
         Array.Clear(_killerMoves);
         //Array.Clear(_historyMoves);
 
-        int movesToGo = 100 - board.PlyCount >> 1,
-            targetDepth = 1,
+        int targetDepth = 1,
             alpha = -32_768,    //  short.MinValue
             beta = 32_767       //  short.MaxValue+
 #if DEBUG
@@ -60,8 +59,7 @@ public class MyBot : IChessBot
 
         #region Time management
 
-        movesToGo = Clamp(movesToGo, 40, 100);
-        _timePerMove = Clamp(timer.MillisecondsRemaining / movesToGo, 1, 2000);
+        _timePerMove = timer.MillisecondsRemaining / 30;
 
 #if DEBUG || UCI
         _nodes = 0;
