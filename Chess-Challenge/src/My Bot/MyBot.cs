@@ -15,47 +15,43 @@ public class MyBot : IChessBot
 {
     public /*internal*/ Board _position;
     Timer _timer;
-    int _timePerMove
+    int _timePerMove;
 #if DEBUG || UCI
-    , _nodes
+    int _nodes;
 #endif
-        ;
 
-    readonly Move[] _pVTable = new Move[8_256];   // 128 * (128 + 1) / 2
     readonly int[,] _previousKillerMoves = new int[2, 128],
                     _killerMoves = new int[2, 128];
     // _historyMoves = new int[12, 64];
 
-    bool _isFollowingPV, _isScoringPV;
+    Move _ttMove;
 
-    /// <summary>
-    /// <see cref="_indexes"/> initialization
-    /// </summary>
-    public MyBot()
+    struct TTElement
     {
-        int previousPVIndex = _indexes[0] = 0;
-
-        for (int i = -1; ++i < 128;)    // 128 = _indexes.Length - 1
-            previousPVIndex = _indexes[i + 1] = previousPVIndex + 128 - i;
+        public ulong Key;
+        public Move BestMove;
+        //public short Score;
+        //public byte Depth;
+        //public byte NodeType;
     }
+
+    const int _ttMask = 0xFFFFFF;                   // 256 MB
+    TTElement[] _tt = new TTElement[_ttMask + 1];
 
     public Move Think(Board board, Timer timer)
     {
         _position = board;
         _timer = timer;
-        _isScoringPV = false;
-        Array.Clear(_pVTable);
         Array.Clear(_killerMoves);
         //Array.Clear(_historyMoves);
 
         int targetDepth = 1,
             alpha = -32_768,    //  short.MinValue
-            beta = 32_767       //  short.MaxValue+
+            beta = 32_767;       //  short.MaxValue+
 #if DEBUG
-            , bestEvaluation = 0;
-#else
-            ;
+         int bestEvaluation = 0;
 #endif
+        ulong originalZobrist = board.ZobristKey;
 
         #region Time management
 
@@ -70,7 +66,6 @@ public class MyBot : IChessBot
 
         #endregion
 
-        Move bestMove = default;
         try
         {
             bool isMateDetected;
@@ -78,7 +73,6 @@ public class MyBot : IChessBot
             do
             {
                 AspirationWindows_SearchAgain:
-                _isFollowingPV = true;
 #if DEBUG
                 bestEvaluation = NegaMax(targetDepth, 0, alpha, beta, false);
 #else
@@ -94,9 +88,8 @@ public class MyBot : IChessBot
                     goto AspirationWindows_SearchAgain;
                 }
 
-                bestMove = _pVTable[0];
 #if DEBUG || UCI
-                Console.WriteLine($"info depth {targetDepth} score {(isMateDetected ? "mate 99" : $"cp {bestEvaluation}")} nodes {_nodes} nps {Convert.ToInt64(Clamp(_nodes / ((0.001 * _timer.MillisecondsElapsedThisTurn) + 1), 0, long.MaxValue))} time {_timer.MillisecondsElapsedThisTurn} pv {string.Join(' ', _pVTable.TakeWhile(m => !m.IsNull).Select(m => m.ToString()[7..^1]))}");
+                PrintInfo(board, targetDepth, bestEvaluation, isMateDetected);
 #endif
                 alpha = bestEvaluation - 50;
                 beta = bestEvaluation + 50;
@@ -108,24 +101,24 @@ public class MyBot : IChessBot
             }
             while (!isMateDetected && msSpentPerDepth < _timePerMove * 0.5);
         }
-        catch (Exception
 #if DEBUG
-        e
-#endif
-        )
+        catch (Exception e)
         {
-#if DEBUG
             if (!e.Message.StartsWith("Exception of type 'System.Exception' was thrown"))
             {
                 Console.WriteLine($"Exception: {e.Message}\n{e.StackTrace}");
             }
-#endif
         }
+#else
+        catch (Exception){}
+#endif
+
+        _ttMove = _tt[originalZobrist & _ttMask].BestMove;
 
 #if DEBUG
-        Console.WriteLine($"bestmove {bestMove.ToString()[7..^1]} score cp {bestEvaluation} depth {targetDepth - 1} time {timer.MillisecondsElapsedThisTurn} nodes {_nodes} pv {string.Join(' ', _pVTable.TakeWhile(m => !m.IsNull).Select(m => m.ToString()[7..^1]))}");
+        PrintBestMove(board, timer, targetDepth, bestEvaluation);
 #endif
-        return bestMove.IsNull ? board.GetLegalMoves()[0] : bestMove;
+        return _ttMove.IsNull ? board.GetLegalMoves()[0] : _ttMove;
     }
 
     public /*internal */int NegaMax(int targetDepth, int ply, int alpha, int beta, bool isQuiescence)
@@ -133,8 +126,16 @@ public class MyBot : IChessBot
         if (_position.FiftyMoveCounter >= 100 || _position.IsRepeatedPosition() || _position.IsInsufficientMaterial())
             return 0;
 
+        _ttMove = default;
+        if (ply > 0)
+        {
+            ref var ttEntry = ref _tt[_position.ZobristKey & _ttMask];
+            if (ttEntry.Key == _position.ZobristKey)
+                _ttMove = ttEntry.BestMove;
+        }
+
         if (!isQuiescence)
-            if (_timer.MillisecondsElapsedThisTurn > _timePerMove)
+            if (_timer.MillisecondsElapsedThisTurn > _timePerMove)	//	 oh nice i get a higher nps removing the (nodes & 2047) == 0 💀 - not check all the time
                 throw new();
             else if (ply > targetDepth)
                 if (_position.IsInCheck())
@@ -149,19 +150,9 @@ public class MyBot : IChessBot
         //_position.GetLegalMovesNonAlloc(ref spanLegalMoves);
         //spanLegalMoves.Sort((a, b) => Score(a, ply > Score(b, ply) ? 1 : 0));
 
-        int pvIndex = _indexes[ply],
-            nextPvIndex = _indexes[ply + 1],
-            staticEvaluation = 0,
+        int staticEvaluation = 0,
             kingSquare;
-        Move bestMove = _pVTable[pvIndex] = default;
-
-        #region Move sorting
-
-        if (!isQuiescence && _isFollowingPV)
-            _isFollowingPV = _position.GetLegalMoves().Contains(_pVTable[ply])
-                && (_isScoringPV = true);
-
-        #endregion
+        Move bestMove = default;
 
         if (isQuiescence)
         {
@@ -230,7 +221,9 @@ public class MyBot : IChessBot
         if (isQuiescence && moves.Length == 0)
             return staticEvaluation;
 
-        foreach (var move in moves.OrderByDescending(move => Score(move, ply, isQuiescence)))
+        //byte nodeType = 1;   // alpha
+
+        foreach (var move in moves.OrderByDescending(move => Score(move, ply, isQuiescence, _ttMove)))
         {
             _position.MakeMove(move);
             var evaluation = -NegaMax(targetDepth, ply + 1, -beta, -alpha, isQuiescence); // Invokes itself, either Negamax or Quiescence
@@ -244,22 +237,16 @@ public class MyBot : IChessBot
                     _killerMoves[1, ply] = _killerMoves[0, ply];
                     _killerMoves[0, ply] = move.RawValue;
                 }
-                return beta;
+                alpha = beta;
+                //nodeType = 2;   // beta
+                break;
             }
 
             if (evaluation > alpha)
             {
                 alpha = evaluation;
-                bestMove = _pVTable[pvIndex] = move;
-
-                #region CopyPVTableMoves
-
-                if (_pVTable[nextPvIndex].IsNull)
-                    Array.Clear(_pVTable, pvIndex + 1, 8_255 - pvIndex);  // 8_255 = _pVTable.Length - pvIndex - 1
-                else
-                    Array.Copy(_pVTable, nextPvIndex, _pVTable, pvIndex + 1, 127 - ply);    // 128 - ply - 1
-
-                #endregion
+                bestMove = move;
+                //nodeType = 3;   // exact
 
                 // 🔍 History moves
                 //if (!move.IsCapture) // No isNotQuiescence check needed, in quiecence there will never be non capure moves
@@ -272,18 +259,21 @@ public class MyBot : IChessBot
         if (bestMove.IsNull && _position.GetLegalMoves().Length == 0)
             return EvaluateFinalPosition(ply);
 
+        ref var entry = ref _tt[_position.ZobristKey & _ttMask];
+        entry.Key = _position.ZobristKey;
+        entry.BestMove = bestMove;
+        //entry.NodeType = nodeType;
+        //entry.Score = (short)alpha;
+        //entry.Depth = (byte)(targetDepth - ply);
+
         // Node fails low
         return alpha;
     }
 
-    public /*internal*/ int Score(Move move, int ply, bool isQuiescence)
+    public /*internal*/ int Score(Move move, int ply, bool isQuiescence, Move ttMove)
     {
-        if (_isScoringPV && move == _pVTable[ply])
-        {
-            _isScoringPV = false;
-
-            return 20_000;
-        }
+        if (move == ttMove)
+            return 200_000;
 
         if (move.IsCapture)
         {
@@ -323,7 +313,7 @@ public class MyBot : IChessBot
         return 0;
     }
 
-    private int EvaluateFinalPosition(int ply) => _position.IsInCheckmate()
+    private int EvaluateFinalPosition(int ply) => _position.IsInCheck()
         ? -30_000 + 10 * ply
         : 0;
 
@@ -333,7 +323,6 @@ public class MyBot : IChessBot
     /// P PSQT | N PSQT | B PSQT | R PSQT | Q PSQT | K PSQT | K endgame PSQT | MVVLVA
     /// </summary>
     public /*internal static*/ readonly int[]
-        _indexes = new int[129],
         MaterialScore = new[]
         {
             0,      // PieceType.Pawn starts at index 1
@@ -368,6 +357,61 @@ public class MyBot : IChessBot
         .ToArray();
 
     #endregion
+
+    #region debugging
+#if DEBUG || UCI
+
+#if DEBUG
+    public MyBot()
+    {
+        var ttElementSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(TTElement));
+        Console.WriteLine("TT length:\t{0} items", _tt.Length);
+        Console.WriteLine("TT memory:\t{0} MB", (_tt.Length * ttElementSize) / 1024 / 1024);
+        Console.WriteLine("TT entry:\t{0} bytes", ttElementSize);
+        Console.WriteLine("TT mask:\t{0}", _ttMask.ToString("X"));
+    }
+#endif
+
+    System.Collections.Generic.List<Move> CalculatePV(Board board, System.Collections.Generic.List<Move> bestMoveList = null)
+    {
+        bestMoveList ??= new System.Collections.Generic.List<Move>(128);
+
+        ref TTElement entry = ref _tt[_position.ZobristKey & _ttMask];
+        if (!entry.BestMove.IsNull)
+        {
+            bestMoveList.Add(entry.BestMove);
+            board.MakeMove(entry.BestMove);
+            CalculatePV(board, bestMoveList);
+            board.UndoMove(entry.BestMove);
+        }
+
+        return bestMoveList;
+    }
+
+    private void PrintInfo(Board board, int targetDepth, int bestEvaluation, bool isMateDetected)
+    {
+        Console.WriteLine(
+            $"info depth {targetDepth}" +
+            $" score {(isMateDetected ? "mate 99" : $"cp {bestEvaluation}")}" +
+            $" nodes {_nodes}" +
+            $" nps {Convert.ToInt64(Clamp(_nodes / ((0.001 * _timer.MillisecondsElapsedThisTurn) + 1), 0, long.MaxValue))}" +
+            $" time {_timer.MillisecondsElapsedThisTurn}" +
+            $" pv {string.Join(' ', CalculatePV(board).Select(m => m.ToString()[7..^1]))}");
+    }
+
+    private void PrintBestMove(Board board, Timer timer, int targetDepth, int bestEvaluation)
+    {
+        Console.WriteLine(
+            $"bestmove {_ttMove.ToString()[7..^1]}" +
+            $" score cp {bestEvaluation}" +
+            $" depth {targetDepth - 1}" +
+            $" time {timer.MillisecondsElapsedThisTurn}" +
+            $" nodes {_nodes}" +
+            $" pv {string.Join(' ', CalculatePV(board).Select(m => m.ToString()[7..^1]))}");
+    }
+
+#endif
+#endregion
 }
 
 #pragma warning restore RCS1001 // Add braces (when expression spans over multiple lines).
