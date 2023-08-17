@@ -15,11 +15,7 @@ public class MyBot : IChessBot
 {
     public /*internal*/ Board _position;
     Timer _timer;
-    int _timePerMove
-#if DEBUG || UCI
-    , _nodes
-#endif
-        ;
+    int _timePerMove, _nodes;
 
     readonly Move[] _pVTable = new Move[8_256];   // 128 * (128 + 1) / 2
     readonly int[,] _previousKillerMoves = new int[2, 128],
@@ -61,9 +57,7 @@ public class MyBot : IChessBot
 
         _timePerMove = timer.MillisecondsRemaining / 30;
 
-#if DEBUG || UCI
         _nodes = 0;
-#endif
 #if DEBUG
         Console.WriteLine($"\n[{GetType().Name}] Searching {_position.GetFenString()} ({_timePerMove}ms to move)");
 #endif
@@ -134,7 +128,7 @@ public class MyBot : IChessBot
             return 0;
 
         if (!isQuiescence)
-            if (_timer.MillisecondsElapsedThisTurn > _timePerMove)
+            if (_nodes % 1024 == 0 && _timer.MillisecondsElapsedThisTurn > _timePerMove)
                 throw new();
             else if (ply > targetDepth)
                 if (_position.IsInCheck())
@@ -221,9 +215,8 @@ public class MyBot : IChessBot
                 alpha = staticEvaluation;
         }
 
-#if UCI || DEBUG
         ++_nodes;
-#endif
+
 
         var moves = _position.GetLegalMoves(isQuiescence);
 
