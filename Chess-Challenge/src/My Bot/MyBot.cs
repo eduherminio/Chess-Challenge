@@ -21,7 +21,7 @@ public class MyBot : IChessBot
                     _killerMoves = new int[2, 128];
     // _historyMoves = new int[12, 64];
 
-    Move _ttMove;
+    Move _bestMove;
 
     struct TTElement
     {
@@ -46,20 +46,15 @@ public class MyBot : IChessBot
             alpha = -32_768,    //  short.MinValue
             beta = 32_767;       //  short.MaxValue+
 #if DEBUG
-         int bestEvaluation = 0;
+        int bestEvaluation = 0;
 #endif
-        ulong originalZobrist = board.ZobristKey;
-
-        #region Time management
-
         _timePerMove = timer.MillisecondsRemaining / 30;
-
         _nodes = 0;
+        _bestMove = default;
+
 #if DEBUG
         Console.WriteLine($"\n[{GetType().Name}] Searching {_position.GetFenString()} ({_timePerMove}ms to move)");
 #endif
-
-        #endregion
 
         try
         {
@@ -108,12 +103,10 @@ public class MyBot : IChessBot
         catch (Exception){}
 #endif
 
-        _ttMove = _tt[originalZobrist & _ttMask].BestMove;
-
 #if DEBUG
         PrintBestMove(board, timer, targetDepth, bestEvaluation);
 #endif
-        return _ttMove.IsNull ? board.GetLegalMoves()[0] : _ttMove;
+        return _bestMove.IsNull ? board.GetLegalMoves()[0] : _bestMove;
     }
 
     public /*internal */int NegaMax(int targetDepth, int ply, int alpha, int beta, bool isQuiescence)
@@ -121,7 +114,7 @@ public class MyBot : IChessBot
         if (_position.FiftyMoveCounter >= 100 || _position.IsRepeatedPosition() || _position.IsInsufficientMaterial())
             return 0;
 
-        _ttMove = default;
+        Move _ttMove = default;
         if (ply > 0)
         {
             ref var ttEntry = ref _tt[_position.ZobristKey & _ttMask];
@@ -239,6 +232,8 @@ public class MyBot : IChessBot
             {
                 alpha = evaluation;
                 bestMove = move;
+                if (ply == 0)
+                    _bestMove = bestMove;
                 //nodeType = 3;   // exact
 
                 // 🔍 History moves
@@ -370,7 +365,7 @@ public class MyBot : IChessBot
         bestMoveList ??= new System.Collections.Generic.List<Move>(128);
 
         ref TTElement entry = ref _tt[_position.ZobristKey & _ttMask];
-        if (!entry.BestMove.IsNull)
+        if (!entry.BestMove.IsNull && board.GetLegalMoves().Contains(entry.BestMove))
         {
             bestMoveList.Add(entry.BestMove);
             board.MakeMove(entry.BestMove);
@@ -395,7 +390,7 @@ public class MyBot : IChessBot
     private void PrintBestMove(Board board, Timer timer, int targetDepth, int bestEvaluation)
     {
         Console.WriteLine(
-            $"bestmove {_ttMove.ToString()[7..^1]}" +
+            $"bestmove {_bestMove.ToString()[7..^1]}" +
             $" score cp {bestEvaluation}" +
             $" depth {targetDepth - 1}" +
             $" time {timer.MillisecondsElapsedThisTurn}" +
@@ -404,7 +399,7 @@ public class MyBot : IChessBot
     }
 
 #endif
-#endregion
+    #endregion
 }
 
 #pragma warning restore RCS1001 // Add braces (when expression spans over multiple lines).
