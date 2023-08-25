@@ -360,7 +360,7 @@ public class MyBot : IChessBot
     }
 #endif
 
-    System.Collections.Generic.List<Move> CalculatePV(Board board, System.Collections.Generic.List<Move> bestMoveList = null)
+    System.Collections.Generic.List<Move> CalculatePV(Board board, System.Collections.Generic.List<Move>? bestMoveList = null)
     {
         bestMoveList ??= new System.Collections.Generic.List<Move>(128);
 
