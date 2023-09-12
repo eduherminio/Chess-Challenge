@@ -3,7 +3,7 @@ using System;
 
 public class MyBot : IChessBot
 {
-    Move bestmoveRoot = Move.NullMove;
+    Move bestMoveRoot = Move.NullMove;
 
     readonly int[] weights = new int[6169];
     (ulong key, Move move, int depth, int score, int bound)[] tt = new (ulong key, Move move, int depth, int score, int bound)[1048576];
@@ -87,8 +87,8 @@ public class MyBot : IChessBot
         updateAcc(1, 768);
 
         // feature weights
-        foreach(bool side in new[] {true, false}) {
-            for(var p = PieceType.Pawn; p <= PieceType.King; p++) {
+        foreach (bool side in new[] {true, false}) {
+            for (var p = PieceType.Pawn; p <= PieceType.King; p++) {
                 int piece = (int)p * 64 - 64, whiteOffset = side ? 0 : 384, sq;
                 ulong mask = board.GetPieceBitboard(p, side);
                 while(mask != 0) {
@@ -122,23 +122,23 @@ public class MyBot : IChessBot
         int best = -30000, eval;
 
         // Check for repetition (this is much more important than material and 50 move rule draws)
-        if(notRoot && board.IsRepeatedPosition())
+        if (notRoot && board.IsRepeatedPosition())
             return 0;
 
-        TTEntry entry = tt[key % 1048576];
+        var entry = tt[key % 1048576];
 
         // TT cutoffs
-        if(notRoot && entry.key == key && entry.depth >= depth && (
+        if (notRoot && entry.key == key && entry.depth >= depth && (
             entry.bound == 3 // exact score
                 || entry.bound == 2 && entry.score >= beta // lower bound, fail high
                 || entry.bound == 1 && entry.score <= alpha // upper bound, fail low
         )) return entry.score;
 
         // Quiescence search is in the same function as negamax to save tokens
-        if(qsearch) {
+        if (qsearch) {
             eval = Evaluate(board);
             best = eval;
-            if(best >= beta) return best;
+            if (best >= beta) return best;
             alpha = Math.Max(alpha, best);
         }
 
@@ -147,24 +147,24 @@ public class MyBot : IChessBot
         int[] scores = new int[moves.Length];
 
         // Score moves
-        for(int i = 0; i < moves.Length; i++) {
+        for (int i = 0; i < moves.Length; i++) {
             Move move = moves[i];
             // TT move
-            if(move == entry.move) scores[i] = 1000000;
+            if (move == entry.move) scores[i] = 1000000;
             // https://www.chessprogramming.org/MVV-LVA
-            else if(move.IsCapture) scores[i] = 100 * (int)move.CapturePieceType - (int)move.MovePieceType;
+            else if (move.IsCapture) scores[i] = 100 * (int)move.CapturePieceType - (int)move.MovePieceType;
         }
 
         Move bestMove = Move.NullMove;
         eval = alpha;
 
         // Search moves
-        for(int i = 0; i < moves.Length; i++) {
-            if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 30000;
+        for (int i = 0; i < moves.Length; i++) {
+            if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 30000;
 
             // Incrementally sort moves
-            for(int j = i + 1; j < moves.Length; j++) {
-                if(scores[j] > scores[i])
+            for (int j = i + 1; j < moves.Length; j++) {
+                if (scores[j] > scores[i])
                     (scores[i], scores[j], moves[i], moves[j]) = (scores[j], scores[i], moves[j], moves[i]);
             }
 
@@ -174,16 +174,16 @@ public class MyBot : IChessBot
             board.UndoMove(move);
 
             // New best move
-            if(score > best) {
+            if (score > best) {
                 best = score;
                 bestMove = move;
-                if(ply == 0) bestmoveRoot = move;
+                if (ply == 0) bestMoveRoot = move;
 
                 // Improve alpha
                 alpha = Math.Max(alpha, score);
 
                 // Fail-high
-                if(alpha >= beta) break;
+                if (alpha >= beta) break;
 
             }
         }
@@ -201,18 +201,18 @@ public class MyBot : IChessBot
     public Move Think(Board board, Timer timer)
     {
         Console.WriteLine($"info eval: {Evaluate(board)}");
-        return Move.NullMove;
-        bestmoveRoot = Move.NullMove;
+        bestMoveRoot = Move.NullMove;
 
         // https://www.chessprogramming.org/Iterative_Deepening
-        for(int depth = 1; depth <= 50; depth++) {
+        for (int depth = 1; depth <= 50; depth++) {
             int score = Search(board, timer, -30000, 30000, depth, 0);
+            Console.WriteLine($"info depth {depth} score: {score} pv {bestMoveRoot}");
 
             // Out of time
-            if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
+            if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
                 break;
         }
 
-        return bestmoveRoot.IsNull ? board.GetLegalMoves()[0] : bestmoveRoot;
+        return bestMoveRoot.IsNull ? board.GetLegalMoves()[0] : bestMoveRoot;
     }
 }
