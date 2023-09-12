@@ -3,8 +3,10 @@ using System;
 
 public class MyBot : IChessBot
 {
-    Timer _timer;
     Move bestMoveRoot;
+#if DEBUG
+    ulong nodes = 0;
+#endif
 
     readonly int[] weights = new int[6169];
     readonly Move[] tt = new Move[1048576];
@@ -74,66 +76,93 @@ public class MyBot : IChessBot
         1199258990120150323122791890m,12094695517970494m,
     };
 
-    private int Search(Board board, int alpha, int beta, int depth, int ply)
+    public Move Think(Board board, Timer timer)
     {
-        bool qs = depth <= 0, root = ply == 0;
-
-        if (_timer.MillisecondsElapsedThisTurn >= _timer.MillisecondsRemaining / 30)
-            return 30000;
+        Move bestMove = bestMoveRoot = default;
 
 #if DEBUG
-        nodes++;
+        nodes = 0;
 #endif
-        ulong key = board.ZobristKey % 1048576;
-
-        if (!root && board.IsRepeatedPosition())
-            return 0;
-
-        if (qs)
+        for (int depth = 0; ++depth <= 50;)
         {
-            alpha = Math.Max(alpha, Evaluate());
-            if (alpha >= beta) return alpha;
+#if DEBUG
+            int score =
+#endif
+            Search(board, -30000, 30000, depth, 0);
+
+            if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
+                break;
+
+#if DEBUG
+            Console.WriteLine($"info depth {depth} score: {score} nodes {nodes} pv {bestMoveRoot}");
+#endif
+
+            bestMove = bestMoveRoot;
         }
 
-        var moves = board.GetLegalMoves(qs);
+        return bestMove.IsNull ? board.GetLegalMoves()[0] : bestMove;
 
-        if (!qs && moves.Length == 0)
-            return board.IsInCheck() ? -30000 + ply : 0;
-
-        var scores = new int[moves.Length];
-        for (int i = 0; i < moves.Length; i++)
+        int Search(Board board, int alpha, int beta, int depth, int ply)
         {
-            Move move = moves[i];
-            scores[i] = move == tt[key]
-                ? -1000000
-                : move.IsCapture
-                    ? (int)move.MovePieceType - 100 * (int)move.CapturePieceType
-                    : 1000000;
-        }
+            bool qs = depth <= 0, root = ply == 0;
 
-        Array.Sort(scores, moves);
+            if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
+                return 30000;
 
-        Move bestMove = default;
+#if DEBUG
+            nodes++;
+#endif
+            ulong key = board.ZobristKey % 1048576;
 
-        foreach (Move move in moves)
-        {
-            board.MakeMove(move);
-            int score = -Search(board, -beta, -alpha, depth - 1, ply + 1);
-            board.UndoMove(move);
+            if (!root && board.IsRepeatedPosition())
+                return 0;
 
-            if (score > alpha)
+            if (qs)
             {
-                alpha = score;
-                bestMove = move;
-                if (root) bestMoveRoot = move;
-                if (alpha >= beta) break;
-
+                alpha = Math.Max(alpha, Evaluate());
+                if (alpha >= beta) return alpha;
             }
+
+            var moves = board.GetLegalMoves(qs);
+
+            if (!qs && moves.Length == 0)
+                return board.IsInCheck() ? -30000 + ply : 0;
+
+            var scores = new int[moves.Length];
+            for (int i = 0; i < moves.Length; i++)
+            {
+                Move move = moves[i];
+                scores[i] = move == tt[key]
+                    ? -1000000
+                    : move.IsCapture
+                        ? (int)move.MovePieceType - 100 * (int)move.CapturePieceType
+                        : 1000000;
+            }
+
+            Array.Sort(scores, moves);
+
+            Move bestMove = default;
+
+            foreach (Move move in moves)
+            {
+                board.MakeMove(move);
+                int score = -Search(board, -beta, -alpha, depth - 1, ply + 1);
+                board.UndoMove(move);
+
+                if (score > alpha)
+                {
+                    alpha = score;
+                    bestMove = move;
+                    if (root) bestMoveRoot = move;
+                    if (alpha >= beta) break;
+
+                }
+            }
+
+            tt[key] = bestMove;
+
+            return alpha;
         }
-
-        tt[key] = bestMove;
-
-        return alpha;
 
         int Evaluate()
         {
@@ -174,37 +203,5 @@ public class MyBot : IChessBot
 
             return eval * 400 / 1024;
         }
-    }
-
-#if DEBUG
-    ulong nodes = 0;
-#endif
-
-    public Move Think(Board board, Timer timer)
-    {
-        _timer = timer;
-        Move bestMove = bestMoveRoot = default;
-
-#if DEBUG
-        nodes = 0;
-#endif
-        for (int depth = 0; ++depth <= 50;)
-        {
-#if DEBUG
-            int score =
-#endif
-            Search(board, -30000, 30000, depth, 0);
-
-            if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
-                break;
-
-#if DEBUG
-            Console.WriteLine($"info depth {depth} score: {score} nodes {nodes} pv {bestMoveRoot}");
-#endif
-
-            bestMove = bestMoveRoot;
-        }
-
-        return bestMove.IsNull ? board.GetLegalMoves()[0] : bestMove;
     }
 }
