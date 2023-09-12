@@ -3,7 +3,6 @@ using System;
 
 public class MyBot : IChessBot
 {
-    Move bestMoveRoot;
 #if DEBUG
     ulong nodes = 0;
 #endif
@@ -78,7 +77,7 @@ public class MyBot : IChessBot
 
     public Move Think(Board board, Timer timer)
     {
-        Move bestMove = bestMoveRoot = default;
+        Move bestMove = default, bestMoveRoot = default;
 
 #if DEBUG
         nodes = 0;
