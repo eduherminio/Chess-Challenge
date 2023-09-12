@@ -88,7 +88,7 @@ public class MyBot : IChessBot
 #if DEBUG
             int score =
 #endif
-            Search(board, -30000, 30000, depth, 0);
+            Search(-30000, 30000, depth, 0);
 
             if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
                 break;
@@ -102,7 +102,7 @@ public class MyBot : IChessBot
 
         return bestMove.IsNull ? board.GetLegalMoves()[0] : bestMove;
 
-        int Search(Board board, int alpha, int beta, int depth, int ply)
+        int Search(int alpha, int beta, int depth, int ply)
         {
             bool qs = depth <= 0, root = ply == 0;
 
@@ -146,7 +146,7 @@ public class MyBot : IChessBot
             foreach (Move move in moves)
             {
                 board.MakeMove(move);
-                int score = -Search(board, -beta, -alpha, depth - 1, ply + 1);
+                int score = -Search(-beta, -alpha, depth - 1, ply + 1);
                 board.UndoMove(move);
 
                 if (score > alpha)
