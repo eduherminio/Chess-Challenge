@@ -1,17 +1,25 @@
 ﻿using ChessChallenge.API;
 using System;
-using System.Linq;
 
 public class MyBot : IChessBot
 {
     Move bestmoveRoot = Move.NullMove;
 
     readonly int[] weights = new int[6169];
+    (ulong key, Move move, int depth, int score, int bound)[] tt = new (ulong key, Move move, int depth, int score, int bound)[1048576];
 
     public MyBot()
     {
         for (int i = 0; i < 6169; i++)
-            weights[i] = (decimal.GetBits(packedWeights[i / 16])[i % 16 / 4] >> (i % 4 * 6) & 63) - 31;
+        {
+            int[] packed = decimal.GetBits(packedWeights[i / 16]);
+            int num = (i % 16) * 6;
+            int bucket = num * 6 / 32;
+            uint adj = ((uint)packed[num / 32] >> (num % 32)) & 63;
+            if (num == 30) adj += ((uint)packed[1] & 15) << 2;
+            if (num == 60) adj += ((uint)packed[2] & 3) << 4;
+            weights[i] = (int)adj - 31;
+        }
     }
 
     decimal[] packedWeights = new[] {
@@ -71,7 +79,7 @@ public class MyBot : IChessBot
 
         void updateAcc(int side, int feature) {
             for (int i = 0; i < 8; i++)
-                accumulators[side, i] = weights[feature * 8 + i];
+                accumulators[side, i] += weights[feature * 8 + i];
         }
 
         // feature biases
@@ -97,41 +105,27 @@ public class MyBot : IChessBot
         // output weights
         void sum(int side, int offset) {
             for (int i = 0; i < 8; i++)
-                eval += accumulators[side, i] * weights[6152 + offset + i];
+                eval += Math.Clamp(accumulators[side, i], 0, 32) * weights[6152 + offset + i];
         }
 
         sum(stm, 0);
         sum(1 - stm, 8);
 
-        return eval;
+        return eval * 400 / 1024;
     }
-
-    // https://www.chessprogramming.org/Transposition_Table
-    struct TTEntry {
-        public ulong key;
-        public Move move;
-        public int depth, score, bound;
-        public TTEntry(ulong _key, Move _move, int _depth, int _score, int _bound) {
-            key = _key; move = _move; depth = _depth; score = _score; bound = _bound;
-        }
-    }
-
-    const int entries = (1 << 20);
-    TTEntry[] tt = new TTEntry[entries];
 
     // https://www.chessprogramming.org/Negamax
     // https://www.chessprogramming.org/Quiescence_Search
     public int Search(Board board, Timer timer, int alpha, int beta, int depth, int ply) {
         ulong key = board.ZobristKey;
-        bool qsearch = depth <= 0;
-        bool notRoot = ply > 0;
-        int best = -30000;
+        bool qsearch = depth <= 0, notRoot = ply > 0;
+        int best = -30000, eval;
 
         // Check for repetition (this is much more important than material and 50 move rule draws)
         if(notRoot && board.IsRepeatedPosition())
             return 0;
 
-        TTEntry entry = tt[key % entries];
+        TTEntry entry = tt[key % 1048576];
 
         // TT cutoffs
         if(notRoot && entry.key == key && entry.depth >= depth && (
@@ -140,10 +134,9 @@ public class MyBot : IChessBot
                 || entry.bound == 1 && entry.score <= alpha // upper bound, fail low
         )) return entry.score;
 
-        int eval = Evaluate(board);
-
         // Quiescence search is in the same function as negamax to save tokens
         if(qsearch) {
+            eval = Evaluate(board);
             best = eval;
             if(best >= beta) return best;
             alpha = Math.Max(alpha, best);
@@ -163,7 +156,7 @@ public class MyBot : IChessBot
         }
 
         Move bestMove = Move.NullMove;
-        int origAlpha = alpha;
+        eval = alpha;
 
         // Search moves
         for(int i = 0; i < moves.Length; i++) {
@@ -196,20 +189,21 @@ public class MyBot : IChessBot
         }
 
         // (Check/Stale)mate
-        if(!qsearch && moves.Length == 0) return board.IsInCheck() ? -30000 + ply : 0;
-
-        // Did we fail high/low or get an exact score?
-        int bound = best >= beta ? 2 : best > origAlpha ? 3 : 1;
+        if (!qsearch && moves.Length == 0)
+            return board.IsInCheck() ? -30000 + ply : 0;
 
         // Push to TT
-        tt[key % entries] = new TTEntry(key, bestMove, depth, best, bound);
+        tt[key % 1048576] = (key, bestMove, depth, best, best >= beta ? 2 : best > eval ? 3 : 1);
 
         return best;
     }
 
     public Move Think(Board board, Timer timer)
     {
+        Console.WriteLine($"info eval: {Evaluate(board)}");
+        return Move.NullMove;
         bestmoveRoot = Move.NullMove;
+
         // https://www.chessprogramming.org/Iterative_Deepening
         for(int depth = 1; depth <= 50; depth++) {
             int score = Search(board, timer, -30000, 30000, depth, 0);
@@ -218,6 +212,7 @@ public class MyBot : IChessBot
             if(timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
                 break;
         }
+
         return bestmoveRoot.IsNull ? board.GetLegalMoves()[0] : bestmoveRoot;
     }
 }
