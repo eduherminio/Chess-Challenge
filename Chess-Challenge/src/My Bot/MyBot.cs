@@ -13,14 +13,14 @@ public class MyBot : IChessBot
 
     public MyBot()
     {
-        for (int i = 0; i < 6169; i++)
+        for (int i = 0; i < 6169;)
         {
             var packed = decimal.GetBits(packedWeights[i / 16]);
             int num = i % 16 * 6;
             uint adj = ((uint)packed[num / 32] >> (num % 32)) & 63;
             if (num == 30) adj += ((uint)packed[1] & 15) << 2;
             if (num == 60) adj += ((uint)packed[2] & 3) << 4;
-            weights[i] = (int)adj - 31;
+            weights[i++] = (int)adj - 31;
         }
     }
 
