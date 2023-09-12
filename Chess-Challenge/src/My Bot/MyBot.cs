@@ -179,8 +179,7 @@ public class MyBot : IChessBot
     public Move Think(Board board, Timer timer)
     {
         _timer = timer;
-        bestMoveRoot = default;
-        Move bestMove = bestMoveRoot;
+        Move bestMove = bestMoveRoot = default;
         // nodes = 0;
 
         for (int depth = 0; ++depth <= 50;)
