@@ -81,7 +81,9 @@ public class MyBot : IChessBot
         if (_timer.MillisecondsElapsedThisTurn >= _timer.MillisecondsRemaining / 30)
             return 30000;
 
-        //nodes++;
+#if DEBUG
+        nodes++;
+#endif
         ulong key = board.ZobristKey % 1048576;
 
         if (!root && board.IsRepeatedPosition())
@@ -174,23 +176,31 @@ public class MyBot : IChessBot
         }
     }
 
-    //ulong nodes = 0;
+#if DEBUG
+    ulong nodes = 0;
+#endif
 
     public Move Think(Board board, Timer timer)
     {
         _timer = timer;
         Move bestMove = bestMoveRoot = default;
-        // nodes = 0;
 
+#if DEBUG
+        nodes = 0;
+#endif
         for (int depth = 0; ++depth <= 50;)
         {
-            //int score =
+#if DEBUG
+            int score =
+#endif
             Search(board, -30000, 30000, depth, 0);
 
             if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
                 break;
 
-            //Console.WriteLine($"info depth {depth} score: {score} nodes {nodes} pv {bestMoveRoot}");
+#if DEBUG
+            Console.WriteLine($"info depth {depth} score: {score} nodes {nodes} pv {bestMoveRoot}");
+#endif
 
             bestMove = bestMoveRoot;
         }
