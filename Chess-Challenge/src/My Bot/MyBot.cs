@@ -125,7 +125,7 @@ public class MyBot : IChessBot
             var moves = board.GetLegalMoves(qs);
 
             if (!qs && moves.Length == 0)
-                return board.IsInCheck() ? -30000 + ply : 0;
+                return board.IsInCheck() ? ply - 30_000 : 0;
 
             var scores = new int[moves.Length];
             for (int i = 0; i < moves.Length; i++)
