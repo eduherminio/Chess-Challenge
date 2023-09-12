@@ -14,7 +14,6 @@ public class MyBot : IChessBot
         {
             int[] packed = decimal.GetBits(packedWeights[i / 16]);
             int num = (i % 16) * 6;
-            int bucket = num * 6 / 32;
             uint adj = ((uint)packed[num / 32] >> (num % 32)) & 63;
             if (num == 30) adj += ((uint)packed[1] & 15) << 2;
             if (num == 60) adj += ((uint)packed[2] & 3) << 4;
@@ -87,10 +86,10 @@ public class MyBot : IChessBot
 
         foreach (bool side in new[] {true, false}) {
             for (var p = PieceType.Pawn; p <= PieceType.King; p++) {
-                int piece = (int)p * 64 - 64, whiteOffset = side ? 0 : 384, sq;
+                int piece = (int)p * 64 - 64, whiteOffset = side ? 0 : 384;
                 ulong mask = board.GetPieceBitboard(p, side);
                 while(mask != 0) {
-                    sq = BitboardHelper.ClearAndGetIndexOfLSB(ref mask);
+                    int sq = BitboardHelper.ClearAndGetIndexOfLSB(ref mask);
                     updateAcc(0, whiteOffset + piece + sq);
                     updateAcc(1, 384 - whiteOffset + piece + (sq ^ 56));
                 }
@@ -111,42 +110,42 @@ public class MyBot : IChessBot
     }
 
     public int Search(Board board, Timer timer, int alpha, int beta, int depth, int ply) {
-        ulong key = board.ZobristKey % 1048576;
-        bool qsearch = depth <= 0, notRoot = ply > 0;
-        int best = -30000;
+        bool qs = depth <= 0, root = ply == 0;
 
-        if (notRoot && board.IsRepeatedPosition())
+        if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
+            return 30000;
+
+        //nodes++;
+        ulong key = board.ZobristKey % 1048576;
+
+        if (!root && board.IsRepeatedPosition())
             return 0;
 
-        var hashMove = tt[key];
-
-        if (qsearch) {
-            int eval = Evaluate(board);
-            best = eval;
-            if (best >= beta) return best;
-            alpha = Math.Max(alpha, best);
+        if (qs) {
+            alpha = Math.Max(alpha, Evaluate(board));
+            if (alpha >= beta) return alpha;
         }
 
-        Move[] moves = board.GetLegalMoves(qsearch);
-        int[] scores = new int[moves.Length];
+        Move[] moves = board.GetLegalMoves(qs);
 
+        if (!qs && moves.Length == 0)
+            return board.IsInCheck() ? -30000 + ply : 0;
+
+        int[] scores = new int[moves.Length];
         for (int i = 0; i < moves.Length; i++) {
             Move move = moves[i];
-            if (move == hashMove) scores[i] = 1000000;
-            else if (move.IsCapture) scores[i] = 100 * (int)move.CapturePieceType - (int)move.MovePieceType;
+            scores[i] = move == tt[key]
+                ? -1000000
+                : move.IsCapture
+                    ? (int)move.MovePieceType - 100 * (int)move.CapturePieceType
+                    : 1000000;
         }
+
+        Array.Sort(scores, moves);
 
         Move bestMove = Move.NullMove;
 
-        for (int i = 0; i < moves.Length; i++) {
-            if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30) return 30000;
-
-            for (int j = i + 1; j < moves.Length; j++) {
-                if (scores[j] > scores[i])
-                    (scores[i], scores[j], moves[i], moves[j]) = (scores[j], scores[i], moves[j], moves[i]);
-            }
-
-            Move move = moves[i];
+        foreach (Move move in moves) {
             board.MakeMove(move);
             int score = -Search(board, timer, -beta, -alpha, depth - 1, ply + 1);
             board.UndoMove(move);
@@ -154,32 +153,32 @@ public class MyBot : IChessBot
             if (score > alpha) {
                 alpha = score;
                 bestMove = move;
-                if (ply == 0) bestMoveRoot = move;
+                if (root) bestMoveRoot = move;
                 if (alpha >= beta) break;
 
             }
         }
-
-        if (!qsearch && moves.Length == 0)
-            return board.IsInCheck() ? -30000 + ply : 0;
 
         tt[key] = bestMove;
 
         return alpha;
     }
 
+    //ulong nodes = 0;
+
     public Move Think(Board board, Timer timer)
     {
         bestMoveRoot = Move.NullMove;
         Move bestMove = bestMoveRoot;
+        // nodes = 0;
 
         for (int depth = 1; depth <= 50; depth++) {
             int score = Search(board, timer, -30000, 30000, depth, 0);
-            //Console.WriteLine($"info depth {depth} score: {score} pv {bestMoveRoot}");
 
-            // Out of time
             if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
                 break;
+
+            //Console.WriteLine($"info depth {depth} score: {score} nodes {nodes} pv {bestMoveRoot}");
 
             bestMove = bestMoveRoot;
         }
