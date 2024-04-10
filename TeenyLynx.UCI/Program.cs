@@ -3,6 +3,7 @@
 using ChessChallenge.API;
 using ChessChallenge.Chess;
 using System.Reflection;
+using TeenyLynx.UCI;
 using Board = ChessChallenge.API.Board;
 using Move = ChessChallenge.API.Move;
 using Timer = ChessChallenge.API.Timer;
@@ -113,6 +114,18 @@ while (true)
             Move move = myBot.Think(board, timer);
 
             Console.WriteLine("bestmove " + GetMoveNameUCI(move));
+        }
+
+        if (tokens[0] == "perft" && tokens.Length > 1 && int.TryParse(tokens[1], out var depth))
+        {
+            var results = Perft.Results(board, depth);
+            Perft.PrintPerftResult(depth, results, Console.WriteLine);
+        }
+
+        if (tokens[0] == "divide" && tokens.Length > 1 && int.TryParse(tokens[1], out depth))
+        {
+            var results = Perft.Divide(board, depth, Console.WriteLine);
+            Perft.PrintPerftResult(depth, results, Console.WriteLine);
         }
     }
     catch (Exception e)
