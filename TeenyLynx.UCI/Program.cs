@@ -2,6 +2,7 @@
 
 using ChessChallenge.API;
 using ChessChallenge.Chess;
+using System.Diagnostics;
 using System.Reflection;
 using Board = ChessChallenge.API.Board;
 using Move = ChessChallenge.API.Move;
@@ -114,6 +115,19 @@ while (true)
 
             Console.WriteLine("bestmove " + GetMoveNameUCI(move));
         }
+        if (tokens[0] == "perft" && tokens.Length >=2)
+        {
+            var depth =  int.Parse(tokens[1]);
+            myBot._position = board;
+
+            var sw = new Stopwatch();
+            sw.Start();
+            var nodes = ResultsImpl(myBot, depth, 0);
+            sw.Stop();
+
+            var results = (nodes, CalculateElapsedMilliseconds(sw));
+            PrintPerftResult(depth, results, str => Console.WriteLine(str));
+        }
     }
     catch (Exception e)
     {
@@ -156,4 +170,54 @@ static string GetVersion()
         !.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
         ?.InformationalVersion?.Split('+')?[0]
         ?? "Unknown";
+}
+
+static long ResultsImpl(MyBot myBot, int depth, long nodes)
+{
+    if (depth != 0)
+    {
+        foreach (var move in myBot._position.GetLegalMoves(false))
+        {
+            myBot._position.MakeMove(move);
+            nodes = ResultsImpl(myBot, depth - 1, nodes);
+            myBot._position.UndoMove(move);
+        }
+
+        return nodes;
+    }
+
+    return nodes + 1;
+}
+
+/// <summary>
+/// http://geekswithblogs.net/BlackRabbitCoder/archive/2012/01/12/c.net-little-pitfalls-stopwatch-ticks-are-not-timespan-ticks.aspx
+/// </summary>
+/// <param name="stopwatch"></param>
+/// <returns></returns>
+static double CalculateElapsedMilliseconds(Stopwatch stopwatch)
+{
+    return 1000 * stopwatch.ElapsedTicks / (double)Stopwatch.Frequency;
+}
+
+static void PrintPerftResult(int depth, (long Nodes, double ElapsedMilliseconds) peftResult, Action<string> write)
+{
+    var timeStr = TimeToString(peftResult.ElapsedMilliseconds);
+
+    write(
+        $"Depth:\t{depth}" + Environment.NewLine +
+        $"Nodes:\t{peftResult.Nodes}" + Environment.NewLine +
+        $"Time:\t{timeStr}" + Environment.NewLine +
+        $"nps:\t{(Math.Round(peftResult.Nodes / peftResult.ElapsedMilliseconds)) / 1000} Mnps" + Environment.NewLine);
+}
+
+static string TimeToString(double milliseconds)
+{
+    return milliseconds switch
+    {
+        < 1 => $"{milliseconds:F} ms",
+        < 1_000 => $"{Math.Round(milliseconds)} ms",
+        < 60_000 => $"{0.001 * milliseconds:F} s",
+        < 3_600_000 => $"{Math.Floor(milliseconds / 60_000)} min {Math.Round(0.001 * (milliseconds % 60_000))} s",
+        _ => $"{Math.Floor(milliseconds / 3_600_000)} h {Math.Round((milliseconds % 3_600_000) / 60_000)} min"
+    };
 }
